@@ -1,7 +1,7 @@
 # Authorization model
 
 Short version: a validated token names a principal; a policy file says what that principal may see; ConnectWise
-calls run with that technician's own API member credentials; IT Glue output is built from allowlists; every call
+calls run with the API member credential set configured for that principal; IT Glue output is built from allowlists; every call
 is audited without content. The sample enforces its stated policy. Whether that policy matches the real
 permissions of each technician is an acceptance task (end of this page).
 
@@ -14,11 +14,12 @@ permissions of each technician is an acceptance task (end of this page).
 - MCP sessions are bound to the principal by the SDK: another user presenting someone else's `Mcp-Session-Id` is
   refused (`test_session_of_another_user_is_refused`).
 
-## 2. ConnectWise PSA: each principal has its own credentials
+## 2. ConnectWise PSA: each principal has its own configured credentials
 
-- `psa_credential` in the policy points to that technician's API member key set (`config/psa-credentials.example.json`
-  in the demo; a secret store in production). Requests run with that member's credentials; effective PSA
-  permissions require live verification.
+- `psa_credential` in the policy names the API member key set the code selects for that principal
+  (`config/psa-credentials.example.json` in the demo; a secret store in production). The code chooses which
+  configured credential set to use; it does not derive anything from the technician's own PSA login. Whether that
+  API member's security role matches what the technician should see is an acceptance task (end of this page).
 - No credential set for a principal means a refusal (`no_psa_credentials`). There is no shared fallback key.
 - The connector also checks, on every record, that the PSA company is the one mapped to the requested client.
   A ticket number that belongs to another client is refused even if the member can read it
@@ -62,25 +63,46 @@ joined by PSA configuration ID through IT Glue's `filter[psa_id]` with `filter[p
    Generate the key with that setting off. Fixtures cannot prove how a real key is configured; this stays an
    acceptance task.
 
-Free text and text fields (ticket summaries and notes, document sections, Text and Textbox traits) cannot be
-allowlisted field by field. They pass through a separate content policy (`src/handover/content.py`) that withholds:
+Every string that comes from ConnectWise or IT Glue passes through one content policy (`src/handover/content.py`),
+through the typed builder in `src/handover/fields.py`: ticket summary, board, status, priority, company
+identifier, contact and owner names, note text and author; configuration name, hostname, type, status, serial
+number, IP and operating system; site summary name, Text, Textbox and Select values and Tag names; document name
+and section text. Integer IDs and ISO dates are parsed strictly instead; an object or a list where a scalar is
+expected is omitted and listed in `omitted_malformed_fields`, never converted to text. The policy withholds:
 
 - any line containing a secret word (password, passcode, pass, pwd, pw, PIN, PSK, key, secret, token, credential,
   creds, MFA, OTP, backup / recovery / door code, "mot de passe"), whatever the separator (`:`, `=`, `-`, `is`,
   `set to`, a space);
 - the next non-empty line when such a line ends with a label and no value (`Password:` then the value below);
 - command lines carrying a password (`net user NAME VALUE`, `sshpass`, `-p VALUE`, `admin ... / VALUE`);
-- PEM private keys, terminated or not.
+- PEM private keys, terminated or not;
+- a label written in Markdown (`**Password:**`, `> **PIN**`) followed by its value on the next line, and a label
+  followed by a code block, in which case the whole block is withheld.
 
-Each form has its own test in `tests/test_content_policy.py`. The policy prefers withholding: a harmless line such
-as "Key contact: Dr Lee" is withheld too. Its limit: a secret written with none of these words or shapes
-("the usual one is Hunter2") is not detected. That is why the demo uses synthetic, approved excerpts only, and why
-the IT Glue key should have Password Access off.
+Each text is cut to 20,000 characters before any regular expression runs, and the patterns avoid nested
+repetition, so the time spent on text is bounded by its size (`test_v7_pathological_text_is_processed_quickly`).
+The 20-second deadline of a tool call covers the upstream HTTP calls.
+
+Each form has its own test in `tests/test_content_policy.py` and `tests/test_verdict_fixes.py`. The policy prefers
+withholding: a harmless line such as "Key contact: Dr Lee" is withheld too. Three limits, stated plainly:
+
+- Detection in free text is heuristic. A secret written with none of these words or shapes ("the usual one is
+  Hunter2"), or a format or context that misleads the detector, is not caught.
+- `content_policy_applied` means that something was withheld. It does not certify that nothing secret remains.
+- Turning Password Access off on the IT Glue key does not protect against a password pasted into a note or a
+  document. Only the content policy, and the habit of keeping secrets in the password vault, do.
 
 Every text value is also capped (600 characters for notes and text fields, 300 for names), and a cut is flagged
 (`truncated`, `truncated_fields`).
 
-## 6. Audit
+## 6. Identity of what comes back
+
+The connector checks that the upstream returned the record it asked for, not only a record of the right client: a
+document must have type `documents`, the requested ID and the requested organization; a ticket must have the
+requested ID and the mapped company. On a mismatch nothing is returned and the audit records a refusal with both
+IDs (`upstream_record_mismatch`).
+
+## 7. Audit
 
 One JSON line per tool call, including calls that fail: principal, client reference, tool, source record IDs,
 decision (`allowed`, `partial`, `refused`, `failed`, `error`), reason code, policy version, timestamp, correlation
@@ -89,7 +111,13 @@ unexpected error is recorded as `internal_error:<exception class>` only (`test_e
 `test_a3_unexpected_internal_error_is_audited`). If the audit line cannot be written, the call returns no data
 (`test_a3_unwritable_audit_log_returns_no_data`).
 
-## 7. Revocation and disabling
+The audit records a client reference only when it is a canonical reference declared in the policy; any other value
+is recorded as `null` with a reason code, and refusal messages never repeat a value supplied by the caller.
+Arguments are bounded (query 100, client reference 32, cursor 2,048 characters, IDs between 1 and 10^12). Calls
+that the MCP SDK rejects before the handler runs (schema validation, unknown tool) are recorded by a middleware as
+`rejected_invalid_arguments`, and the error returned does not contain the offending value.
+
+## 8. Revocation and disabling
 
 | Situation | Action | Effect |
 |---|---|---|

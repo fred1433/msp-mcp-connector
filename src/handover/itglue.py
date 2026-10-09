@@ -2,13 +2,15 @@
 
 Locks on passwords, each tested:
 1. No code path calls a password endpoint or asks to include password relationships.
-2. Every output is built from an allowlist of attributes; unknown attributes are dropped.
+2. Every output field is built from an allowlist with a typed parser (src/handover/fields.py);
+   unknown attributes are dropped, values of the wrong type are omitted and reported.
 3. Flexible asset traits are kept only if the field definition says they are a
    safe kind. `Password` fields and `Tag` fields pointing at passwords are
-   excluded. If the field definitions cannot be loaded, all traits are omitted.
+   excluded. If the field definitions cannot be read completely, all traits are omitted.
 4. A field whose name suggests a secret (password, passcode, PIN, key, secret,
    credential, token...) is omitted whatever its kind.
-5. Every text value passes through the content policy (src/handover/content.py).
+5. Every string from IT Glue (names, Select values, Tag names, text traits,
+   document sections) passes through the content policy (src/handover/content.py).
 
 A last lock belongs to the deployment, not the code: generate the IT Glue API
 key without password access (docs/authorization.md). Fixtures cannot prove that
@@ -24,48 +26,54 @@ from typing import Any
 import httpx
 
 from .config import Budgets
-from .content import cap, clean, name_suggests_secret
+from .content import name_suggests_secret
+from .fields import Record, as_id
 from .upstream import Deadline, SharedBudget, SourceUnavailable, send
 
 JSONAPI = "application/vnd.api+json"
-MAX_ATTR_CHARS = 200
+FIELD_DEFINITION_PAGE_SIZE = 100
+FIELD_DEFINITION_MAX_PAGES = 5
 
+# attribute -> (output key, parser)
 CONFIGURATION_ATTRIBUTES = {
-    "name": "name",
-    "hostname": "hostname",
-    "configuration-type-name": "type",
-    "configuration-status-name": "status",
-    "serial-number": "serial_number",
-    "primary-ip": "primary_ip",
-    "operating-system-name": "operating_system",
-    "updated-at": "updated_at",
+    "name": ("name", "text"),
+    "hostname": ("hostname", "text"),
+    "configuration-type-name": ("type", "text"),
+    "configuration-status-name": ("status", "text"),
+    "serial-number": ("serial_number", "text"),
+    "primary-ip": ("primary_ip", "text"),
+    "operating-system-name": ("operating_system", "text"),
+    "updated-at": ("updated_at", "date"),
 }
 
-PLAIN_TRAIT_KINDS = {"Number", "Date", "Select", "Checkbox", "Percent"}
-TEXT_TRAIT_KINDS = {"Text", "Textbox"}  # passed through the content policy
+SCALAR_TRAIT_KINDS = {"Number", "Percent", "Checkbox"}
+TEXT_TRAIT_KINDS = {"Text", "Textbox", "Select"}
+DATE_TRAIT_KINDS = {"Date"}
 
 
 class DocumentRestricted(Exception):
     """IT Glue marks the document restricted: never excerpted, whatever the policy says."""
 
 
-_TAG = re.compile(r"<[^>]+>")
+class RecordMismatch(Exception):
+    """The upstream returned a different record from the one requested."""
+
+    def __init__(self, requested: str, received: str) -> None:
+        super().__init__("record mismatch")
+        self.requested = requested
+        self.received = received
+
+
+_TAG = re.compile(r"<[^>]{0,2000}>")
 
 
 def _strip_html(text: str) -> str:
-    text = re.sub(r"(?i)<br\s*/?>|</p>|</h\d>|</li>", "\n", text)
+    text = re.sub(r"(?i)<br ?/?>|</p>|</h[1-6]>|</li>", "\n", text)
     return html.unescape(_TAG.sub("", text)).strip()
 
 
 def _bad(detail: str) -> SourceUnavailable:
     return SourceUnavailable("itglue", "bad_response", detail)
-
-
-def _int(value: Any, what: str) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        raise _bad(f"The source returned a {what} that is not a number.") from None
 
 
 class ITGlue:
@@ -106,56 +114,83 @@ class ITGlue:
         rows = data if isinstance(data, list) else [data]
         return [r for r in rows if isinstance(r, dict)]
 
+    @staticmethod
+    def _attrs(row: dict) -> dict:
+        a = row.get("attributes")
+        return a if isinstance(a, dict) else {}
+
+    @staticmethod
+    def _next_page(body: dict) -> Any:
+        meta = body.get("meta")
+        return meta.get("next-page") if isinstance(meta, dict) else None
+
     # ------------------------------------------------------------------ reads
     async def organization(self, org_id: int, deadline: Deadline) -> dict:
         body = await self._get(f"/organizations/{int(org_id)}", {}, deadline)
         data = body["data"]
-        if not isinstance(data, dict) or "id" not in data:
-            raise _bad("The organization record has no id.")
-        return {"id": _int(data["id"], "organization id"), "name": cap((data.get("attributes") or {}).get("name"), MAX_ATTR_CHARS)}
+        oid = as_id(data.get("id")) if isinstance(data, dict) else None
+        if oid is None:
+            raise _bad("The organization record has no valid id.")
+        return {"id": oid}
 
     async def configurations_for_psa_ids(self, org_id: int, psa_ids: list[int], deadline: Deadline) -> tuple[list[dict], int, bool]:
         """IT Glue configurations of this organization synced from the ticket's PSA configurations.
         Joined by PSA id through filter[psa_id] + filter[psa_integration_type]=manage, never by name.
-        At most `max_records` PSA configurations are looked up.
-        Returns (configurations, excluded_out_of_scope, more_not_looked_up)."""
-        more = len(psa_ids) > self.budgets.max_records
-        out, excluded, seen = [], 0, set()
-        for psa_id in psa_ids[: self.budgets.max_records]:
+        The accumulated list is bounded to `max_records`.
+        Returns (configurations, excluded_out_of_scope, has_more)."""
+        out: list[dict] = []
+        excluded, seen, more = 0, set(), False
+        for psa_id in psa_ids:
+            if len(out) >= self.budgets.max_records:
+                more = True
+                break
             body = await self._get("/configurations", {
                 "filter[organization_id]": int(org_id),
                 "filter[psa_id]": str(int(psa_id)),
                 "filter[psa_integration_type]": "manage",
             }, deadline)
+            if self._next_page(body):
+                more = True
             for row in self._rows(body):
-                if "id" not in row:
+                cid = as_id(row.get("id"))
+                if cid is None or cid in seen:
                     continue
-                attrs = row.get("attributes") or {}
-                if str(attrs.get("organization-id")) != str(org_id):
+                attrs = self._attrs(row)
+                if as_id(attrs.get("organization-id")) != int(org_id):
                     excluded += 1  # upstream returned a record from another organization
                     continue
-                if row["id"] in seen:
-                    continue
-                seen.add(row["id"])
-                item: dict[str, Any] = {"id": _int(row["id"], "configuration id"), "psa_configuration_id": int(psa_id)}
-                for src, dst in CONFIGURATION_ATTRIBUTES.items():
-                    value = attrs.get(src)
-                    if value not in (None, ""):
-                        item[dst] = cap(str(value), MAX_ATTR_CHARS)
-                out.append(item)
+                if len(out) >= self.budgets.max_records:
+                    more = True
+                    break
+                seen.add(cid)
+                r = Record()
+                r.out["id"] = cid
+                r.out["psa_configuration_id"] = int(psa_id)
+                for src, (dst, kind) in CONFIGURATION_ATTRIBUTES.items():
+                    (r.text if kind == "text" else r.date)(dst, attrs.get(src))
+                out.append(r.done())
         return out, excluded, more
 
-    async def _field_definitions(self, type_id: int, deadline: Deadline) -> dict[str, dict] | None:
-        try:
-            body = await self._get(f"/flexible_asset_types/{int(type_id)}/relationships/flexible_asset_fields", {}, deadline)
-        except SourceUnavailable:
-            return None
-        defs = {}
-        for row in self._rows(body):
-            a = row.get("attributes") or {}
-            if a.get("name-key"):
-                defs[a["name-key"]] = {"kind": a.get("kind"), "tag_type": a.get("tag-type"), "name": a.get("name")}
-        return defs
+    async def _field_definitions(self, type_id: int, deadline: Deadline) -> tuple[dict[str, dict] | None, str | None]:
+        """All field definitions of a flexible asset type, following pages. (defs, problem)."""
+        defs: dict[str, dict] = {}
+        page = 1
+        while True:
+            try:
+                body = await self._get(f"/flexible_asset_types/{int(type_id)}/relationships/flexible_asset_fields",
+                                       {"page[size]": FIELD_DEFINITION_PAGE_SIZE, "page[number]": page}, deadline)
+            except SourceUnavailable:
+                return None, "field_definitions_unavailable"
+            for row in self._rows(body):
+                a = self._attrs(row)
+                key = a.get("name-key")
+                if isinstance(key, str):
+                    defs[key] = {"kind": a.get("kind"), "tag_type": a.get("tag-type"), "name": a.get("name")}
+            if not self._next_page(body):
+                return defs, None
+            if page >= FIELD_DEFINITION_MAX_PAGES:
+                return None, "field_definitions_incomplete"
+            page += 1
 
     async def site_summary(self, org_id: int, deadline: Deadline) -> dict | None:
         if self.site_summary_type_id is None:
@@ -164,81 +199,90 @@ class ITGlue:
             "filter[flexible-asset-type-id]": int(self.site_summary_type_id),
             "filter[organization-id]": int(org_id),
         }, deadline)
-        rows = [r for r in self._rows(body) if str((r.get("attributes") or {}).get("organization-id")) == str(org_id)]
-        if not rows or "id" not in rows[0]:
+        rows = [r for r in self._rows(body) if as_id(self._attrs(r).get("organization-id")) == int(org_id)
+                and as_id(r.get("id")) is not None]
+        if not rows:
             return None
+        if len(rows) > 1 or self._next_page(body):
+            return {"status": "ambiguous", "candidate_ids": sorted(as_id(r["id"]) for r in rows),
+                    "message": "Several site summaries exist for this organization; none is shown. "
+                               "Configure which one is authoritative."}
         row = rows[0]
-        attrs = row.get("attributes") or {}
+        attrs = self._attrs(row)
         traits = attrs.get("traits") if isinstance(attrs.get("traits"), dict) else {}
-        defs = await self._field_definitions(self.site_summary_type_id, deadline)
-        out: dict[str, Any] = {"id": _int(row["id"], "flexible asset id"), "name": cap(attrs.get("name"), MAX_ATTR_CHARS),
-                               "updated_at": attrs.get("updated-at")}
+        head = Record()
+        head.out["id"] = as_id(row["id"])
+        head.text("name", attrs.get("name"))
+        head.date("updated_at", attrs.get("updated-at"))
+        out = head.done()
+        defs, problem = await self._field_definitions(self.site_summary_type_id, deadline)
         if defs is None:
             out["fields"] = {}
-            out["fields_omitted"] = {"reason": "field_definitions_unavailable", "count": len(traits)}
+            out["fields_omitted"] = {"reason": problem, "count": len(traits)}
             return out
-        fields: dict[str, Any] = {}
+        fields = Record()
         omitted = {"password_fields": 0, "secret_named_fields": 0, "other_fields": 0}
-        redacted, truncated = [], []
         for key, value in traits.items():
             d = defs.get(key)
             if d is None:
                 omitted["other_fields"] += 1  # not in the schema: unknown, so not shown
                 continue
-            kind = d["kind"]
-            if kind == "Password" or (kind == "Tag" and str(d.get("tag_type") or "").lower() == "passwords"):
+            kind, tag_type, name = d["kind"], d.get("tag_type"), d.get("name")
+            if kind == "Password" or (kind == "Tag" and isinstance(tag_type, str) and tag_type.lower() == "passwords"):
                 omitted["password_fields"] += 1
                 continue
-            if name_suggests_secret(d.get("name"), key):
-                omitted["secret_named_fields"] += 1
+            if not isinstance(name, str) or name_suggests_secret(name, key):
+                omitted["secret_named_fields" if isinstance(name, str) else "other_fields"] += 1
                 continue
-            label = cap(d.get("name") or key, MAX_ATTR_CHARS)
-            if kind in TEXT_TRAIT_KINDS and isinstance(value, str):
-                c = clean(value, self.budgets.max_note_chars)
-                fields[label] = c.text
-                if c.redacted:
-                    redacted.append(label)
-                if c.truncated:
-                    truncated.append(label)
-            elif kind in PLAIN_TRAIT_KINDS and isinstance(value, (int, float, bool)):
-                fields[label] = value
-            elif kind in PLAIN_TRAIT_KINDS and isinstance(value, str):
-                fields[label] = cap(value, MAX_ATTR_CHARS)
-            elif kind == "Tag" and isinstance(value, dict):
-                names = [v.get("name") for v in value.get("values") or [] if isinstance(v, dict)]
-                fields[label] = [cap(str(n), MAX_ATTR_CHARS) for n in names[: self.budgets.max_records] if n]
+            label = name[:100]
+            if kind in TEXT_TRAIT_KINDS:
+                fields.text(label, value, self.budgets.max_note_chars)
+            elif kind in SCALAR_TRAIT_KINDS:
+                fields.scalar(label, value)
+            elif kind in DATE_TRAIT_KINDS:
+                fields.date(label, value)
+            elif kind == "Tag" and isinstance(value, dict) and isinstance(value.get("values"), list):
+                names = [v.get("name") for v in value["values"] if isinstance(v, dict)]
+                fields.text_list(label, names, self.budgets.max_records)
             else:
                 omitted["other_fields"] += 1
-        out["fields"] = fields
+        built = fields.done()
+        for flag in ("omitted_malformed_fields", "content_policy_applied", "truncated_fields"):
+            if flag in built:
+                out[flag] = built.pop(flag)
+        out["fields"] = built
         omitted = {k: v for k, v in omitted.items() if v}
         if omitted:
             out["fields_omitted"] = omitted
-        if redacted:
-            out["content_policy_applied"] = redacted
-        if truncated:
-            out["truncated_fields"] = truncated
         return out
 
     async def document_excerpt(self, org_id: int, document_id: int, deadline: Deadline, budgets: Budgets) -> dict:
-        """One request: the show route returns the document with its sections."""
+        """One request: the show route returns the document with its sections.
+        The record received must be a document, with the id requested, in the organization requested."""
         body = await self._get(f"/organizations/{int(org_id)}/relationships/documents/{int(document_id)}", {}, deadline)
         data = body["data"]
-        if not isinstance(data, dict) or "id" not in data:
-            raise _bad("The document record has no id.")
-        attrs = data.get("attributes") or {}
-        if attrs.get("restricted"):
-            raise DocumentRestricted()
+        if not isinstance(data, dict):
+            raise _bad("The document record is not an object.")
+        received_id = as_id(data.get("id"))
+        attrs = self._attrs(data)
+        received_org = as_id(attrs.get("organization-id"))
+        if data.get("type") != "documents" or received_id != int(document_id) or received_org != int(org_id):
+            raise RecordMismatch(f"itg:document/{int(document_id)}",
+                                 f"itg:{'document' if data.get('type') == 'documents' else 'other'}/{received_id}")
+        if attrs.get("restricted") is not False:
+            raise DocumentRestricted()  # restricted, or the flag is missing or not a boolean: fail closed
         parts = []
-        for section in attrs.get("sections") or []:
+        sections = attrs.get("sections") if isinstance(attrs.get("sections"), list) else []
+        for section in sections:
             a = section.get("attributes", section) if isinstance(section, dict) else {}
-            if a.get("resource-type") in ("Document::Heading", "Document::Text", "Document::Step"):
-                parts.append(_strip_html(str(a.get("content") or "")))
-        c = clean("\n".join(p for p in parts if p), budgets.max_note_chars)
-        out = {"id": _int(data["id"], "document id"),
-               "organization_id": _int(attrs.get("organization-id", -1), "organization id"),
-               "name": cap(attrs.get("name"), MAX_ATTR_CHARS), "updated_at": attrs.get("updated-at"), "excerpt": c.text}
-        if c.redacted:
-            out["content_policy_applied"] = True
-        if c.truncated:
-            out["truncated"] = True
-        return out
+            if isinstance(a, dict) and a.get("resource-type") in ("Document::Heading", "Document::Text", "Document::Step"):
+                content = a.get("content")
+                if isinstance(content, str):
+                    parts.append(_strip_html(content[:50_000]))
+        r = Record()
+        r.out["id"] = received_id
+        r.out["organization_id"] = received_org
+        r.text("name", attrs.get("name"))
+        r.date("updated_at", attrs.get("updated-at"))
+        r.text("excerpt", "\n".join(p for p in parts if p), budgets.max_note_chars)
+        return r.done()

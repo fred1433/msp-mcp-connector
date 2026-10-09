@@ -115,7 +115,7 @@ class TestScope:
         alice = session_for(server, "tech-alice")
         out = alice.call("get_document_excerpt", client_ref="CL-0142", document_id=77001)
         assert out["status"] == "ok"
-        assert "network profile is Domain" in out["document"]["excerpt"]
+        assert "DomainAuthenticated cannot be set by hand" in out["document"]["excerpt"]
         assert "Ch@ngeMe-2026" not in out["document"]["excerpt"]
         assert out["document"]["source"]["system"] == "itglue"
 

@@ -34,7 +34,7 @@
             {
               "id": 2,
               "resource-type": "Document::Text",
-              "content": "<p>Imaging workstations map S: to \\\\NFD-FS01\\Imaging over SMB.</p><p>If S: fails after Windows updates, check the network profile is Domain, not Public.</p><p>Service account password: Ch@ngeMe-2026</p>"
+              "content": "<p>Imaging workstations map S: to \\\\NFD-FS01\\Imaging over SMB.</p><p>If S: fails, run Get-NetConnectionProfile on the PC. DomainAuthenticated cannot be set by hand: Windows sets it when the network is authenticated to a domain controller.</p><p>If the category is Public or Private, check that the PC resolves and reaches a domain controller, then check the detected category again and test S:.</p><p>Service account password: Ch@ngeMe-2026</p>"
             },
             {
               "id": 3,

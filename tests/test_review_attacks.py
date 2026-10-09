@@ -192,7 +192,7 @@ def test_a3_unwritable_audit_log_returns_no_data(server, session_for):
 @pytest.mark.parametrize("ticket_id", [-1, 0, 10**20])
 def test_a3_odd_ticket_ids_do_not_crash(server, session_for, ticket_id):
     out = session_for(server, "tech-alice").call("get_ticket_context", client_ref="CL-0142", ticket_id=ticket_id)
-    assert out["status"] in ("unavailable", "error", "refused")
+    assert out["status"] == "rejected" and out["reason"] == "invalid_arguments"
     assert _audit_lines(server)[-1]["tool"] == "get_ticket_context"
 
 
@@ -229,7 +229,7 @@ def _walk(tmp_path, rows, budgets, max_calls=60):
 
 @pytest.mark.parametrize("n,hostile,big,budget,max_calls", [
     (0, 0, 0, Budgets(), 1), (25, 0, 0, Budgets(), 1), (26, 0, 0, Budgets(), 2), (100, 0, 0, Budgets(), 4),
-    (101, 0, 0, Budgets(), 5), (130, 3, 0, Budgets(), 4), (40, 0, 300, Budgets(max_output_chars=2_000), 40),
+    (101, 0, 0, Budgets(), 5), (130, 3, 0, Budgets(), 4), (40, 0, 300, Budgets(max_output_chars=2_500), 40),
 ])
 def test_a4_pagination_reaches_the_end_exactly(tmp_path, n, hostile, big, budget, max_calls):
     rows = _rows(n, hostile, big)

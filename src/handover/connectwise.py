@@ -5,7 +5,8 @@ Request shapes (Basic auth `companyId+publicKey:privateKey`, `clientId` header,
 implementations, linked in docs/api-assumptions.md. The vendor's own reference
 sits behind a developer login and is not quoted here.
 
-Output is built field by field from allowlists. Anything not listed is dropped.
+Output is built field by field with typed parsers (src/handover/fields.py).
+Anything not listed is dropped; a value of the wrong type is omitted and reported.
 """
 
 from __future__ import annotations
@@ -16,17 +17,17 @@ from typing import Any
 import httpx
 
 from .config import Budgets
-from .content import cap, clean
 from .credentials import PsaCredential
+from .fields import Record, as_id
 from .upstream import Deadline, SharedBudget, SourceUnavailable, send
 
 
-MAX_TEXT = 300
+def _bad(detail: str) -> SourceUnavailable:
+    return SourceUnavailable("connectwise", "bad_response", detail)
 
 
-def _name(obj: Any, key: str = "name") -> str | None:
-    value = obj.get(key) if isinstance(obj, dict) else None
-    return None if value is None else str(value)
+def _sub(obj: Any, key: str) -> Any:
+    return obj.get(key) if isinstance(obj, dict) else None
 
 
 class ConnectWise:
@@ -57,38 +58,33 @@ class ConnectWise:
         try:
             body = resp.json()
         except ValueError:
-            raise SourceUnavailable("connectwise", "bad_response", "The source returned a body that is not JSON.") from None
+            raise _bad("The source returned a body that is not JSON.") from None
         if not isinstance(body, kind):
-            raise SourceUnavailable("connectwise", "bad_response", "The source returned an unexpected shape.")
+            raise _bad("The source returned an unexpected shape.")
         return body
 
     @staticmethod
-    def _ticket(row: dict) -> dict:
-        info = row.get("_info") if isinstance(row.get("_info"), dict) else {}
-        company = row.get("company") if isinstance(row.get("company"), dict) else {}
-        try:
-            ticket_id, company_id = int(row["id"]), int(company.get("id", -1))
-        except (TypeError, ValueError, KeyError):
-            raise SourceUnavailable("connectwise", "bad_response", "The source returned a ticket with a malformed id.") from None
-        summary = clean(str(row.get("summary") or ""), MAX_TEXT)
-        out = {
-            "id": ticket_id,
-            "summary": summary.text,
-            "board": cap(_name(row.get("board")), MAX_TEXT),
-            "status": cap(_name(row.get("status")), MAX_TEXT),
-            "priority": cap(_name(row.get("priority")), MAX_TEXT),
-            "company_id": company_id,
-            "company_identifier": cap(company.get("identifier"), MAX_TEXT),
-            "contact": cap(_name(row.get("contact")), MAX_TEXT),
-            "owner": cap(_name(row.get("owner"), "identifier"), MAX_TEXT),
-            "entered_at": cap(info.get("dateEntered"), 40),
-            "last_updated": cap(info.get("lastUpdated"), 40),
-        }
-        if summary.redacted:
-            out["content_policy_applied"] = True
-        if summary.truncated:
-            out["truncated"] = True
-        return out
+    def _ticket(row: Any) -> dict:
+        if not isinstance(row, dict):
+            raise _bad("The source returned a ticket that is not an object.")
+        ticket_id = as_id(row.get("id"))
+        company_id = as_id(_sub(row.get("company"), "id"))
+        if ticket_id is None or company_id is None:
+            raise _bad("The source returned a ticket with a malformed id.")
+        info = row.get("_info")
+        r = Record()
+        r.out["id"] = ticket_id
+        r.text("summary", row.get("summary"))
+        r.text("board", _sub(row.get("board"), "name"))
+        r.text("status", _sub(row.get("status"), "name"))
+        r.text("priority", _sub(row.get("priority"), "name"))
+        r.out["company_id"] = company_id
+        r.text("company_identifier", _sub(row.get("company"), "identifier"))
+        r.text("contact", _sub(row.get("contact"), "name"))
+        r.text("owner", _sub(row.get("owner"), "identifier"))
+        r.date("entered_at", _sub(info, "dateEntered"))
+        r.date("last_updated", _sub(info, "lastUpdated"))
+        return r.done()
 
     async def open_tickets(self, cred: PsaCredential, company_id: int, page: int, deadline: Deadline) -> tuple[list[dict], bool]:
         params = {
@@ -102,7 +98,7 @@ class ConnectWise:
         # Next-page signal: a Link header with rel="next" (third-party source, see docs/api-assumptions.md),
         # or, failing that, a full page. A full last page costs one extra empty request, never a missed one.
         more = 'rel="next"' in resp.headers.get("link", "") or len(rows) >= self.budgets.max_records
-        return [self._ticket(r) for r in rows if isinstance(r, dict) and "id" in r], more
+        return [self._ticket(r) for r in rows], more
 
     async def ticket(self, cred: PsaCredential, ticket_id: int, deadline: Deadline) -> dict:
         resp = await self._get(cred, f"/service/tickets/{int(ticket_id)}", {}, deadline)
@@ -113,33 +109,32 @@ class ConnectWise:
         resp = await self._get(cred, f"/service/tickets/{int(ticket_id)}/notes", params, deadline)
         out = []
         for row in self._json(resp, list):
-            if not isinstance(row, dict) or "id" not in row:
+            if not isinstance(row, dict):
                 continue
-            c = clean(str(row.get("text") or ""), budgets.max_note_chars)
-            kind = ("resolution" if row.get("resolutionFlag") else
-                    "internal" if row.get("internalAnalysisFlag") else
-                    "discussion" if row.get("detailDescriptionFlag") else "note")
-            try:
-                note_id = int(row["id"])
-            except (TypeError, ValueError):
-                raise SourceUnavailable("connectwise", "bad_response", "The source returned a note with a malformed id.") from None
-            note = {"id": note_id, "kind": kind, "created_at": cap(row.get("dateCreated"), 40),
-                    "created_by": cap(row.get("createdBy"), MAX_TEXT), "text": c.text}
-            if c.redacted:
-                note["content_policy_applied"] = True
-            if c.truncated:
-                note["truncated"] = True
-            out.append(note)
+            note_id = as_id(row.get("id"))
+            if note_id is None:
+                raise _bad("The source returned a note with a malformed id.")
+            kind = ("resolution" if row.get("resolutionFlag") is True else
+                    "internal" if row.get("internalAnalysisFlag") is True else
+                    "discussion" if row.get("detailDescriptionFlag") is True else "note")
+            r = Record()
+            r.out["id"] = note_id
+            r.out["kind"] = kind
+            r.date("created_at", row.get("dateCreated"))
+            r.text("created_by", row.get("createdBy"))
+            r.text("text", row.get("text"), budgets.max_note_chars)
+            out.append(r.done())
         out.sort(key=lambda n: n["id"])  # oldest first, so a reader follows the story
         return out
 
     async def ticket_configurations(self, cred: PsaCredential, ticket_id: int, deadline: Deadline) -> list[dict]:
         resp = await self._get(cred, f"/service/tickets/{int(ticket_id)}/configurations", {}, deadline)
         out = []
-        for r in self._json(resp, list):
-            if isinstance(r, dict) and "id" in r:
-                try:
-                    out.append({"id": int(r["id"]), "name": cap(r.get("deviceIdentifier") or r.get("name"), MAX_TEXT)})
-                except (TypeError, ValueError):
-                    raise SourceUnavailable("connectwise", "bad_response", "The source returned a configuration with a malformed id.") from None
+        for row in self._json(resp, list):
+            if not isinstance(row, dict):
+                continue
+            cid = as_id(row.get("id"))
+            if cid is None:
+                raise _bad("The source returned a configuration with a malformed id.")
+            out.append({"id": cid})
         return out

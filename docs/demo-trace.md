@@ -162,7 +162,7 @@ Result:
 }
 ```
 
-## 4. Everything needed to hand over ticket 48211
+## 4. Everything needed to hand over the first open ticket
 
 `tools/call` **get_ticket_context**
 
@@ -217,8 +217,10 @@ Result:
       "kind": "internal",
       "created_at": "2026-10-09T13:26:00Z",
       "created_by": "aking",
-      "text": "Pinged NFD-FS01: replies. SMB from FD-01 times out. Windows Update installed KB on FD-01/02 overnight.\n[line withheld by content policy: possible credential]\nWill check firewall profile next.",
-      "content_policy_applied": true,
+      "text": "Pinged NFD-FS01: replies. SMB from FD-01 times out. Windows Update installed KB on FD-01/02 overnight.\n[line withheld by content policy: possible credential]\nWill check the network profile next.",
+      "content_policy_applied": [
+        "text"
+      ],
       "source": {
         "system": "connectwise",
         "record": "service/tickets/48211/notes/910337",
@@ -230,7 +232,7 @@ Result:
       "kind": "internal",
       "created_at": "2026-10-09T13:40:00Z",
       "created_by": "aking",
-      "text": "Network profile on FD-01 flipped to Public after the update; file sharing blocked. Switched FD-01 back to Domain profile as a test: share reachable. FD-02 not yet done.",
+      "text": "Get-NetConnectionProfile on FD-01: NetworkCategory is Public, not DomainAuthenticated, so the domain was not detected on that connection and file sharing is blocked. Checking that FD-01 resolves and reaches the domain controller next. FD-02 not checked yet. Cause not established.",
       "source": {
         "system": "connectwise",
         "record": "service/tickets/48211/notes/910342",
@@ -277,6 +279,9 @@ Result:
     "id": 640118,
     "name": "Northfield Dental - Site Summary",
     "updated_at": "2026-09-12T16:40:00.000Z",
+    "content_policy_applied": [
+      "Site notes"
+    ],
     "fields": {
       "Internet provider": "Metro Fiber 500/500, circuit MF-88213",
       "Firewall": [
@@ -291,15 +296,30 @@ Result:
       "password_fields": 2,
       "other_fields": 1
     },
-    "content_policy_applied": [
-      "Site notes"
-    ],
     "source": {
       "system": "itglue",
       "record": "flexible_assets/640118",
       "fetched_at": "2026-10-09T14:00:00+00:00"
     }
   },
+  "approved_documents": [
+    {
+      "id": 77001,
+      "title": "Imaging share (S:) troubleshooting",
+      "source": {
+        "system": "policy",
+        "record": "policy/2026-10-09.1"
+      }
+    },
+    {
+      "id": 77003,
+      "title": "Firewall admin procedure",
+      "source": {
+        "system": "policy",
+        "record": "policy/2026-10-09.1"
+      }
+    }
+  ],
   "sources": [
     {
       "system": "connectwise",
@@ -315,9 +335,11 @@ Result:
 }
 ```
 
-## 5. The approved runbook excerpt
+## 5. The first approved runbook listed by the ticket context
 
 `tools/call` **get_document_excerpt**
+
+`document_id` taken from get_ticket_context.approved_documents[0].id in the previous result.
 
 ```json
 {
@@ -340,8 +362,10 @@ Result:
     "organization_id": 3101,
     "name": "Imaging share (S:) troubleshooting",
     "updated_at": "2026-08-21T10:05:00.000Z",
-    "excerpt": "Imaging share (S:)\nImaging workstations map S: to \\\\NFD-FS01\\Imaging over SMB.\nIf S: fails after Windows updates, check the network profile is Domain, not Public.\n[line withheld by content policy: possible credential]",
-    "content_policy_applied": true,
+    "excerpt": "Imaging share (S:)\nImaging workstations map S: to \\\\NFD-FS01\\Imaging over SMB.\nIf S: fails, run Get-NetConnectionProfile on the PC. DomainAuthenticated cannot be set by hand: Windows sets it when the network is authenticated to a domain controller.\nIf the category is Public or Private, check that the PC resolves and reaches a domain controller, then check the detected category again and test S:.\n[line withheld by content policy: possible credential]",
+    "content_policy_applied": [
+      "excerpt"
+    ],
     "source": {
       "system": "itglue",
       "record": "organizations/3101/relationships/documents/77001",
@@ -358,7 +382,7 @@ Result:
 }
 ```
 
-## 6. A runbook this technician is not approved for
+## 6. A runbook id this technician is not approved for
 
 `tools/call` **get_document_excerpt**
 
@@ -375,7 +399,7 @@ Result:
 {
   "status": "refused",
   "reason": "document_not_allowed",
-  "message": "Document 77002 is not approved for you in client CL-0142.",
+  "message": "This document is not approved for you in this client.",
   "correlation_id": "demo-0006"
 }
 ```
@@ -391,7 +415,7 @@ itglue      GET /organizations/3101
 itglue      GET /configurations?filter[organization_id]=3101&filter[psa_id]=9120&filter[psa_integration_type]=manage
 itglue      GET /configurations?filter[organization_id]=3101&filter[psa_id]=9131&filter[psa_integration_type]=manage
 itglue      GET /flexible_assets?filter[flexible-asset-type-id]=41&filter[organization-id]=3101
-itglue      GET /flexible_asset_types/41/relationships/flexible_asset_fields
+itglue      GET /flexible_asset_types/41/relationships/flexible_asset_fields?page[size]=100&page[number]=1
 itglue      GET /organizations/3101/relationships/documents/77001
 ```
 

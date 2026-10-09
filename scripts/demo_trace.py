@@ -24,13 +24,22 @@ counter = itertools.count(1)
 AuditLog.new_correlation_id = staticmethod(lambda: f"demo-{next(counter):04d}")  # deterministic for the trace
 
 STEPS = [
-    ("The technician names a client that exists twice", "resolve_client", {"query": "Summit Accounting"}),
-    ("The technician names the client of the ticket", "resolve_client", {"query": "Northfield"}),
-    ("Open tickets for that client", "list_open_tickets", {"client_ref": "CL-0142"}),
-    ("Everything needed to hand over ticket 48211", "get_ticket_context", {"client_ref": "CL-0142", "ticket_id": 48211}),
-    ("The approved runbook excerpt", "get_document_excerpt", {"client_ref": "CL-0142", "document_id": 77001}),
-    ("A runbook this technician is not approved for", "get_document_excerpt", {"client_ref": "CL-0142", "document_id": 77002}),
+    ("The technician names a client that exists twice", "resolve_client", lambda prev: {"query": "Summit Accounting"}),
+    ("The technician names the client of the ticket", "resolve_client", lambda prev: {"query": "Northfield"}),
+    ("Open tickets for that client", "list_open_tickets",
+     lambda prev: {"client_ref": prev["resolve_client"]["candidates"][0]["client_ref"]}),
+    ("Everything needed to hand over the first open ticket", "get_ticket_context",
+     lambda prev: {"client_ref": prev["list_open_tickets"]["client"]["client_ref"],
+                   "ticket_id": prev["list_open_tickets"]["tickets"][0]["id"]}),
+    ("The first approved runbook listed by the ticket context", "get_document_excerpt",
+     lambda prev: {"client_ref": prev["get_ticket_context"]["client"]["client_ref"],
+                   "document_id": prev["get_ticket_context"]["approved_documents"][0]["id"]}),
+    ("A runbook id this technician is not approved for", "get_document_excerpt",
+     lambda prev: {"client_ref": "CL-0142", "document_id": 77002}),
 ]
+NOTES = {
+    4: "`document_id` taken from get_ticket_context.approved_documents[0].id in the previous result.",
+}
 
 
 def main() -> int:
@@ -41,9 +50,13 @@ def main() -> int:
             assert s.initialize().status_code == 200
             tools = s.rpc("tools/list").json()["result"]["tools"]
             results = []
-            for title, tool, args in STEPS:
+            prev: dict = {}
+            for title, tool, make_args in STEPS:
+                args = make_args(prev)
                 r = s.rpc("tools/call", {"name": tool, "arguments": args})
-                results.append((title, tool, args, r.json()))
+                body = r.json()
+                prev[tool] = json.loads(body["result"]["content"][0]["text"])
+                results.append((title, tool, args, body))
             audit = [json.dumps({k: v for k, v in rec.items() if k != "ts"}, sort_keys=True) for rec in srv.app.audit.records]
             upstream = srv.transport.requests
             assert srv.transport.violations == [], srv.transport.violations
@@ -69,7 +82,8 @@ def main() -> int:
     for i, (title, tool, args, body) in enumerate(results, 1):
         result = body["result"]
         payload = result.get("structuredContent") or json.loads(result["content"][0]["text"])
-        out += ["", f"## {i}. {title}", "", f"`tools/call` **{tool}**", "", "```json",
+        note = [NOTES[i - 1], ""] if (i - 1) in NOTES else []
+        out += ["", f"## {i}. {title}", "", f"`tools/call` **{tool}**", ""] + note + ["```json",
                 json.dumps(args, indent=2), "```", "", "Result:", "", "```json",
                 json.dumps(payload, indent=2, ensure_ascii=False), "```"]
     out += ["", "## Upstream requests made (method, path, query, PSA credential used)", "", "```"]

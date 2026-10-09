@@ -31,10 +31,15 @@ SECRET_WORDS = (
     r"mot\s+de\s+passe|mdp|api[\s_-]?key|private[\s_-]?key"
 )
 _SECRET_WORD = re.compile(rf"(?i)(?<![a-z0-9])(?:{SECRET_WORDS})(?![a-z0-9])")
-_ENDS_WITH_LABEL = re.compile(rf"(?i)(?:{SECRET_WORDS})\s*(?:[:=\-]|is|set to)?\s*$|[:=\-]\s*$")
+# Applied to a line already stripped of trailing spaces and Markdown emphasis, so no
+# pattern needs a trailing `\s*`; patterns avoid nested or adjacent repetitions.
+_ENDS_WITH_LABEL = re.compile(rf"(?i)(?:{SECRET_WORDS})[ \t]*(?:[:=\-]|\bis|\bset to)?$|[:=\-]$")
 _COMMANDS = re.compile(
-    r"(?i)\bnet\s+user\s+\S+\s+\S+|\bsshpass\b|\s-p\s*\S+|\badmin\w*\s*:?\s*\S*\s+/\s+\S+|/p(?:assword)?:\S+"
+    r"(?i)\bnet[ \t]+user[ \t]+[^\s/]+[ \t]+\S|\bsshpass\b|\s-p[ \t]*\S|"
+    r"\badmin[a-z]*:?[ \t]+(?:[^\s/]+[ \t]+)?/[ \t]*\S|/p(?:assword)?:\S"
 )
+_FENCE = ("```", "~~~")
+MAX_INPUT_CHARS = 20_000  # every text is cut to this length before any regular expression runs
 _PEM_BLOCK = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S)
 
 REDACTED = "[line withheld by content policy: possible credential]"
@@ -57,16 +62,29 @@ class Cleaned:
 
 
 def clean(text: str, max_chars: int) -> Cleaned:
+    if not isinstance(text, str):
+        raise TypeError("clean() accepts strings only")
+    truncated = False
+    if len(text) > MAX_INPUT_CHARS:
+        text, truncated = text[:MAX_INPUT_CHARS], True
     redacted = False
     text, n = _PEM_BLOCK.subn(REDACTED, text)
     redacted |= n > 0
     out: list[str] = []
     withhold_next = False
+    in_withheld_fence = False
     for line in text.splitlines():
-        if withhold_next and line.strip():
-            out.append(REDACTED)
-            redacted = True
+        stripped = line.strip()
+        if in_withheld_fence:
+            if stripped.startswith(_FENCE):
+                in_withheld_fence = False
+            continue
+        if withhold_next and stripped:
             withhold_next = False
+            redacted = True
+            if stripped.startswith(_FENCE):
+                in_withheld_fence = True  # a label followed by a code block: the whole block goes
+            out.append(REDACTED)
             continue
         if line == REDACTED:
             out.append(line)
@@ -74,11 +92,11 @@ def clean(text: str, max_chars: int) -> Cleaned:
         if _SECRET_WORD.search(line) or _COMMANDS.search(line):
             out.append(REDACTED)
             redacted = True
-            withhold_next = bool(_ENDS_WITH_LABEL.search(line.strip()))
+            bare = line.rstrip(" \t*_`#>|")
+            withhold_next = bool(_ENDS_WITH_LABEL.search(bare))
             continue
         out.append(line)
     result = "\n".join(out).strip()
-    truncated = False
     if len(result) > max_chars:
         result = result[: max(0, max_chars - 1)].rstrip() + "…"
         truncated = True

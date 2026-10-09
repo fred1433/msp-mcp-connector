@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -29,6 +30,55 @@ INSTRUCTIONS = (
     "If a source is reported unavailable, say that its facts are missing, never that they do not exist. "
     "Password fields are excluded by the server and cannot be requested."
 )
+
+TOOL_NAMES = {"resolve_client", "list_open_tickets", "get_ticket_context", "get_document_excerpt"}
+
+
+class AuditRejectedCalls:
+    """MCP middleware: a tools/call rejected by the SDK before our handler runs (arguments that
+    fail schema validation, unknown tool) still leaves one audit line, and the error returned
+    never repeats the offending value. Our handlers never set isError, so isError means rejection."""
+
+    def __init__(self, handover: Handover) -> None:
+        self.handover = handover
+
+    def _record(self, params: object) -> str:
+        cid = self.handover.audit.new_correlation_id()
+        name = params.get("name") if isinstance(params, dict) else None
+        principal = current_principal()
+        self.handover.audit.record(
+            correlation_id=cid, principal=principal.key if principal else None, client_ref=None,
+            tool=name if name in TOOL_NAMES else "unknown_tool", decision="rejected_invalid_arguments",
+            reason="schema_validation_failed" if name in TOOL_NAMES else "unknown_tool",
+            policy_version=self.handover._policy_version(),
+        )
+        return cid
+
+    @staticmethod
+    def _generic(cid: str) -> dict:
+        body = {"status": "rejected", "reason": "invalid_arguments", "correlation_id": cid,
+                "message": "The arguments do not match this tool's schema. Values are not echoed."}
+        return {"content": [{"type": "text", "text": json.dumps(body, indent=2)}], "isError": True}
+
+    async def __call__(self, ctx, call_next):
+        if ctx.method != "tools/call":
+            return await call_next(ctx)
+        try:
+            result = await call_next(ctx)
+        except Exception:
+            try:
+                cid = self._record(ctx.params)
+            except Exception:  # noqa: BLE001
+                cid = "audit-unavailable"
+            return self._generic(cid)
+        if isinstance(result, dict) and result.get("isError"):
+            try:
+                cid = self._record(ctx.params)
+            except Exception:  # noqa: BLE001
+                cid = "audit-unavailable"
+            return self._generic(cid)
+        return result
+
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 
@@ -73,13 +123,14 @@ def build(settings: Settings, *, upstream_transport: httpx.AsyncBaseTransport | 
         instructions=INSTRUCTIONS,
         version="0.1.0",
         token_verifier=verifier,
+        middleware=[AuditRejectedCalls(handover)],
         auth=AuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource_url,
                           validate_token_resource=False),  # audience is checked by JwtVerifier
     )
 
     @mcp.tool(title="Resolve client", annotations=READ_ONLY)
     async def resolve_client(
-        query: Annotated[str, Field(description="Client name or internal client reference, e.g. 'CL-0142'.")],
+        query: Annotated[str, Field(description="Client name or internal client reference, e.g. 'CL-0142'.", max_length=100)],
     ) -> dict:
         """Find the client the technician means, among the clients they are authorized for.
         Returns client_ref values to use with the other tools. Never guesses between clients that share a name."""
@@ -87,16 +138,16 @@ def build(settings: Settings, *, upstream_transport: httpx.AsyncBaseTransport | 
 
     @mcp.tool(title="List open tickets", annotations=READ_ONLY)
     async def list_open_tickets(
-        client_ref: Annotated[str, Field(description="client_ref from resolve_client.")],
-        cursor: Annotated[str | None, Field(description="Cursor from a previous call, to continue the list.")] = None,
+        client_ref: Annotated[str, Field(description="client_ref from resolve_client.", max_length=32)],
+        cursor: Annotated[str | None, Field(description="Cursor from a previous call, to continue the list.", max_length=2048)] = None,
     ) -> dict:
         """Open ConnectWise PSA tickets for one client. Paginated: when has_more is true, call again with cursor."""
         return await handover.list_open_tickets(current_principal(), client_ref, cursor)
 
     @mcp.tool(title="Get ticket context", annotations=READ_ONLY)
     async def get_ticket_context(
-        client_ref: Annotated[str, Field(description="client_ref from resolve_client.")],
-        ticket_id: Annotated[int, Field(description="ConnectWise PSA ticket number.")],
+        client_ref: Annotated[str, Field(description="client_ref from resolve_client.", max_length=32)],
+        ticket_id: Annotated[int, Field(description="ConnectWise PSA ticket number.", ge=1, le=10**12)],
     ) -> dict:
         """Everything needed to hand over one ticket: the ticket, its recent history, the IT Glue
         configurations attached to it, and the client's site summary. Each fact names its source."""
@@ -104,8 +155,8 @@ def build(settings: Settings, *, upstream_transport: httpx.AsyncBaseTransport | 
 
     @mcp.tool(title="Get document excerpt", annotations=READ_ONLY)
     async def get_document_excerpt(
-        client_ref: Annotated[str, Field(description="client_ref from resolve_client.")],
-        document_id: Annotated[int, Field(description="IT Glue document id.")],
+        client_ref: Annotated[str, Field(description="client_ref from resolve_client.", max_length=32)],
+        document_id: Annotated[int, Field(description="IT Glue document id.", ge=1, le=10**12)],
     ) -> dict:
         """An approved excerpt of one IT Glue document, if the policy approves it for this technician."""
         return await handover.get_document_excerpt(current_principal(), client_ref, document_id)

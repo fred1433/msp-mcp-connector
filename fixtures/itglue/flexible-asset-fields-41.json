@@ -4,7 +4,10 @@
     "method": "GET",
     "host": "api.itglue.com",
     "path": "/flexible_asset_types/41/relationships/flexible_asset_fields",
-    "query": {}
+    "query": {
+      "page[size]": 100,
+      "page[number]": 1
+    }
   },
   "provenance": {
     "status": "verified",

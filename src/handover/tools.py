@@ -15,8 +15,9 @@ and one audit record, including when the call fails.
 from __future__ import annotations
 
 import functools
-import json
 import sys
+
+import pydantic_core
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -27,7 +28,7 @@ from .connectwise import ConnectWise
 from .credentials import CredentialStore
 from .cursor import CursorCodec
 from .identity import Principal
-from .itglue import DocumentRestricted, ITGlue
+from .itglue import DocumentRestricted, ITGlue, RecordMismatch
 from .policy import ClientLink, Grant, Policy, PolicyError
 from .upstream import Deadline, SourceUnavailable
 
@@ -38,8 +39,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def mcp_text(obj: Any) -> str:
+    """The exact text the MCP SDK puts in the tool result (mcp.server.mcpserver func_metadata._convert_to_content)."""
+    return pydantic_core.to_json(obj, fallback=str, indent=2).decode()
+
+
 def _size(obj: Any) -> int:
-    return len(json.dumps(obj))  # escaped form: the larger of the two encodings
+    return len(mcp_text(obj))
+
+
+MAX_QUERY_CHARS = 100
+MAX_CURSOR_CHARS = 2_048
 
 
 def _longest_string(obj: Any, path: tuple = ()) -> tuple[int, tuple] | None:
@@ -109,7 +119,8 @@ def audited(tool: str):
     def deco(fn):
         @functools.wraps(fn)
         async def wrapper(self: "Handover", principal: Principal | None, *args, **kwargs):
-            ctx = self._ctx(tool, principal, kwargs.get("client_ref") or (args[0] if args and tool != "resolve_client" else None))
+            raw_ref = kwargs.get("client_ref") or (args[0] if args and tool != "resolve_client" else None)
+            ctx = self._ctx(tool, principal, self._canonical(raw_ref))
             try:
                 out = await fn(self, ctx, principal, *args, **kwargs)
                 return enforce_budget(out, self.budgets.max_output_chars)
@@ -148,10 +159,17 @@ class Handover:
         except Exception:  # noqa: BLE001
             return "unreadable"
 
-    def _refusal(self, ctx: dict, err: PolicyError) -> dict:
+    def _canonical(self, value: Any) -> str | None:
+        try:
+            return self.policy.canonical_client_ref(value)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _refusal(self, ctx: dict, err: PolicyError, source_ids: list[str] | None = None) -> dict:
         self.audit.record(
             correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=ctx.get("client_ref"),
             tool=ctx["tool"], decision="refused", reason=err.code, policy_version=self._policy_version(),
+            source_ids=source_ids,
         )
         return {"status": "refused", "reason": err.code, "message": err.message, "correlation_id": ctx["cid"]}
 
@@ -171,6 +189,8 @@ class Handover:
     async def resolve_client(self, ctx: dict, principal: Principal | None, query: str) -> dict:
         try:
             grant = self.policy.grant(principal)
+            if not isinstance(query, str) or len(query) > MAX_QUERY_CHARS:
+                raise PolicyError("argument_too_long", "The query is too long.")
         except PolicyError as err:
             return self._refusal(ctx, err)
         q = query.strip().casefold()
@@ -210,6 +230,8 @@ class Handover:
             grant, link = self._grant_and_link(principal, client_ref)
             cred = self.credentials.psa(grant.psa_credential)
             state = {"page": 1, "skip": 0}
+            if cursor is not None and (not isinstance(cursor, str) or len(cursor) > MAX_CURSOR_CHARS):
+                raise PolicyError("invalid_cursor", "This cursor is malformed.")
             if cursor:
                 state = self.cursors.decode(cursor, principal=grant.principal.key, client_ref=client_ref,
                                             tool=ctx["tool"], query=query_key)
@@ -315,9 +337,13 @@ class Handover:
                               policy_version=self._policy_version(), sources_unavailable=["connectwise"])
             return {"status": "unavailable", "sources": [err.public()], "correlation_id": ctx["cid"],
                     "message": "The ticket could not be read from ConnectWise; no handover can be prepared."}
+        if ticket["id"] != int(ticket_id):
+            return self._refusal(ctx, PolicyError(
+                "upstream_record_mismatch", "ConnectWise returned a different ticket from the one requested; nothing is shown."),
+                source_ids=[f"requested:cw:ticket/{int(ticket_id)}", f"received:cw:ticket/{ticket['id']}"])
         if ticket["company_id"] != link.psa_company_id:
             return self._refusal(ctx, PolicyError(
-                "ticket_not_in_client", f"Ticket {ticket_id} does not belong to client {client_ref}."))
+                "ticket_not_in_client", "This ticket does not belong to the requested client."))
         ticket["source"] = self._source("connectwise", f"service/tickets/{ticket_id}")
         out["ticket"] = ticket
         source_ids.append(f"cw:ticket/{ticket_id}")
@@ -351,7 +377,9 @@ class Handover:
             if more_cfg:
                 out["configurations_has_more"] = True
             summary = await self.itglue.site_summary(link.itglue_organization_id, deadline)
-            if summary is not None:
+            if summary is not None and summary.get("status") == "ambiguous":
+                out["site_summary"] = summary
+            elif summary is not None:
                 summary["source"] = self._source("itglue", f"flexible_assets/{summary['id']}")
                 source_ids.append(f"itg:flexible_asset/{summary['id']}")
                 out["site_summary"] = summary
@@ -362,6 +390,11 @@ class Handover:
             sources.append(err.public())
             unavailable.append("itglue")
 
+        # 4. Runbooks approved by the policy for this technician and client (ids and titles only).
+        out["approved_documents"] = [
+            {**d, "source": {"system": "policy", "record": f"policy/{self._policy_version()}"}}
+            for d in self.policy.approved_documents(grant, client_ref)
+        ]
         out["sources"] = sources
         if unavailable:
             out["status"] = "partial"
@@ -396,24 +429,23 @@ class Handover:
         try:
             grant, link = self._grant_and_link(principal, client_ref)
             if not self.policy.document_allowed(grant, client_ref, document_id):
-                raise PolicyError("document_not_allowed",
-                                  f"Document {document_id} is not approved for you in client {client_ref}.")
+                raise PolicyError("document_not_allowed", "This document is not approved for you in this client.")
         except PolicyError as err:
             return self._refusal(ctx, err)
         try:
             doc = await self.itglue.document_excerpt(link.itglue_organization_id, document_id, deadline, self.budgets)
         except DocumentRestricted:
-            return self._refusal(ctx, PolicyError("document_restricted_in_itglue",
-                                                  f"Document {document_id} is restricted in IT Glue."))
+            return self._refusal(ctx, PolicyError("document_restricted_in_itglue", "This document is restricted in IT Glue."))
+        except RecordMismatch as mm:
+            return self._refusal(ctx, PolicyError(
+                "upstream_record_mismatch", "IT Glue returned a different record from the one requested; nothing is shown."),
+                source_ids=[f"requested:{mm.requested}", f"received:{mm.received}"])
         except SourceUnavailable as err:
             self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
                               tool=ctx["tool"], decision="failed", reason=f"itglue_{err.code}",
                               policy_version=self._policy_version(), sources_unavailable=["itglue"])
             return {"status": "unavailable", "sources": [err.public()], "correlation_id": ctx["cid"],
                     "message": "IT Glue could not be consulted; the document may exist but was not read."}
-        if doc["organization_id"] != link.itglue_organization_id:
-            return self._refusal(ctx, PolicyError("document_not_in_client",
-                                                  f"Document {document_id} does not belong to client {client_ref}."))
         doc["source"] = self._source("itglue", f"organizations/{link.itglue_organization_id}/relationships/documents/{document_id}")
         self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
                           tool=ctx["tool"], decision="allowed", reason="ok", policy_version=self._policy_version(),

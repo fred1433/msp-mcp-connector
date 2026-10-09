@@ -96,13 +96,25 @@ class Policy:
             for ref, c in self._load().get("clients", {}).items()
         ]
 
+    def canonical_client_ref(self, value: object) -> str | None:
+        """The client reference exactly as declared in the policy, or None. Free input never goes further."""
+        if not isinstance(value, str) or len(value) > 32:
+            return None
+        return value if value in self._load().get("clients", {}) else None
+
     def link(self, grant: Grant, client_ref: str) -> ClientLink:
-        if client_ref not in grant.clients:
-            raise PolicyError("client_not_allowed", f"You are not authorized for client {client_ref}.")
+        # Messages never repeat the value supplied by the caller.
+        if self.canonical_client_ref(client_ref) is None or client_ref not in grant.clients:
+            raise PolicyError("client_not_allowed", "You are not authorized for this client, or it does not exist.")
         for link in self.all_links():
             if link.client_ref == client_ref:
                 return link
-        raise PolicyError("client_not_mapped", f"Client {client_ref} has no PSA/IT Glue mapping.")
+        raise PolicyError("client_not_mapped", "This client has no PSA / IT Glue mapping.")
+
+    def approved_documents(self, grant: Grant, client_ref: str, limit: int = 10) -> list[dict]:
+        titles = self._load().get("document_titles", {})
+        ids = sorted(grant.documents.get(client_ref, frozenset()))[:limit]
+        return [{"id": i, "title": str(titles.get(str(i), "untitled"))} for i in ids]
 
     def document_allowed(self, grant: Grant, client_ref: str, document_id: int) -> bool:
         return document_id in grant.documents.get(client_ref, frozenset())
