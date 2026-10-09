@@ -1,0 +1,31 @@
+{
+  "id": "cw.ticket.48211.configurations",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets/48211/configurations",
+    "query": {},
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "assumption",
+    "sources": [
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/service/tickets_api.py"
+    ],
+    "note": "Third-party source shows {id, deviceIdentifier} as the payload of this sub-resource; the GET response shape is assumed to match."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 9120,
+        "deviceIdentifier": "NFD-FS01"
+      },
+      {
+        "id": 9131,
+        "deviceIdentifier": "NFD-FW01"
+      }
+    ]
+  }
+}

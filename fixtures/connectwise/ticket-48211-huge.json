@@ -1,0 +1,22 @@
+{
+  "id": "cw.ticket.48211.huge",
+  "scenarios": [
+    "huge_body"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets/48211",
+    "query": {},
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "hostile",
+    "note": "A 3 MB body, above the connector's per-response cap."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body_repeat": 3000000
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "id": "itg.flexible-assets.site-summary.3101",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/flexible_assets",
+    "query": {
+      "filter[flexible-asset-type-id]": 41,
+      "filter[organization-id]": 3101
+    }
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Filters written with hyphens as in the reference for GET /flexible_assets. Traits keyed by name-key. 'legacy-vpn-psk' is not in the field definitions: a hostile trait the connector must drop."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": "640118",
+          "type": "flexible-assets",
+          "attributes": {
+            "organization-id": 3101,
+            "flexible-asset-type-id": 41,
+            "name": "Northfield Dental - Site Summary",
+            "traits": {
+              "internet-provider": "Metro Fiber 500/500, circuit MF-88213",
+              "firewall": {
+                "type": "Configurations",
+                "values": [
+                  {
+                    "id": 553214,
+                    "name": "NFD-FW01"
+                  }
+                ]
+              },
+              "wifi-network": "NFD-Staff",
+              "wifi-key": "S3cret-Wifi-Key!",
+              "domain-admin": {
+                "type": "Passwords",
+                "values": [
+                  {
+                    "id": 88001,
+                    "name": "NFD domain admin"
+                  }
+                ]
+              },
+              "after-hours-contact": "Office manager, mobile on file in PSA contact",
+              "backup-window": "Nightly 22:00-02:00 to on-site NAS, offsite copy 03:00",
+              "site-notes": "Imaging software needs SMB to NFD-FS01.\nBreak-glass pin: 4471\nPrinters on VLAN 30.",
+              "legacy-vpn-psk": "not-in-schema-psk"
+            },
+            "updated-at": "2026-09-12T16:40:00.000Z"
+          }
+        }
+      ],
+      "meta": {
+        "current-page": 1,
+        "next-page": null,
+        "total-pages": 1,
+        "total-count": 1
+      }
+    }
+  }
+}

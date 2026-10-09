@@ -1,0 +1,62 @@
+{
+  "version": "2026-10-09.1",
+  "_comment": "Synthetic. Each principal key is '<iss>|<sub>' from a validated token. Clients are linked by internal reference -> PSA company id -> IT Glue organization id, never by name.",
+  "kill_switch": false,
+  "disabled_principals": [],
+  "clients": {
+    "CL-0142": {
+      "display_name": "Northfield Dental Group",
+      "psa_company_id": 250,
+      "itglue_organization_id": 3101
+    },
+    "CL-0177": {
+      "display_name": "Lakeview Veterinary Partners",
+      "psa_company_id": 263,
+      "itglue_organization_id": 3140
+    },
+    "CL-0201": {
+      "display_name": "Summit Accounting",
+      "psa_company_id": 312,
+      "itglue_organization_id": 3188
+    },
+    "CL-0233": {
+      "display_name": "Summit Accounting",
+      "psa_company_id": 348,
+      "itglue_organization_id": 3215
+    }
+  },
+  "principals": {
+    "https://login.example-idp.test/msp-tenant/v2.0|tech-alice": {
+      "label": "Alice, service desk tier 2",
+      "psa_credential": "alice",
+      "clients": [
+        "CL-0142",
+        "CL-0201",
+        "CL-0233"
+      ],
+      "documents": {
+        "CL-0142": [
+          77001,
+          77003
+        ]
+      }
+    },
+    "https://login.example-idp.test/msp-tenant/v2.0|tech-bob": {
+      "label": "Bob, service desk tier 1",
+      "psa_credential": "bob",
+      "clients": [
+        "CL-0177",
+        "CL-0201"
+      ],
+      "documents": {}
+    },
+    "https://login.example-idp.test/msp-tenant/v2.0|tech-carol": {
+      "label": "Carol, onboarding (no PSA credential set yet)",
+      "psa_credential": "carol",
+      "clients": [
+        "CL-0177"
+      ],
+      "documents": {}
+    }
+  }
+}

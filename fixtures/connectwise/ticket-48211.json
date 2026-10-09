@@ -1,0 +1,61 @@
+{
+  "id": "cw.ticket.48211",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets/48211",
+    "query": {},
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/service/ticket.py"
+    ],
+    "note": "Single ticket by id."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "id": 48211,
+      "summary": "Front desk PCs cannot reach imaging share since this morning",
+      "recordType": "ServiceTicket",
+      "board": {
+        "id": 1,
+        "name": "Service Desk"
+      },
+      "status": {
+        "id": 16,
+        "name": "In Progress"
+      },
+      "company": {
+        "id": 250,
+        "identifier": "NORTHFIELDDENT",
+        "name": "Northfield Dental Group"
+      },
+      "contact": {
+        "id": 4002,
+        "name": "Front desk"
+      },
+      "priority": {
+        "id": 8,
+        "name": "Priority 2 - Quick Response"
+      },
+      "owner": {
+        "id": 151,
+        "identifier": "aking"
+      },
+      "closedFlag": false,
+      "_info": {
+        "dateEntered": "2026-10-08T15:12:00Z",
+        "lastUpdated": "2026-10-09T13:41:00Z",
+        "enteredBy": "portal",
+        "updatedBy": "aking"
+      },
+      "initialDescription": "should never be copied: not in the allowlist"
+    }
+  }
+}

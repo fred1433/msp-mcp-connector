@@ -1,0 +1,39 @@
+{
+  "id": "itg.document.77003",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101/relationships/documents/77003",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Document marked restricted in IT Glue (documented attribute 'restricted')."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": {
+        "id": "77003",
+        "type": "documents",
+        "attributes": {
+          "organization-id": 3101,
+          "name": "Firewall admin procedure",
+          "restricted": true,
+          "updated-at": "2026-07-02T09:00:00.000Z",
+          "sections": [
+            {
+              "id": 9,
+              "resource-type": "Document::Text",
+              "content": "<p>restricted body</p>"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

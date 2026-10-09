@@ -1,0 +1,126 @@
+{
+  "id": "itg.flexible-asset-fields.41",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/flexible_asset_types/41/relationships/flexible_asset_fields",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Field definitions: kind is one of Checkbox, Date, Header, Number, Select, Text, Textbox, Upload, Tag, Percent, Password; Tag fields carry tag-type (e.g. Passwords)."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": "700",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Internet provider",
+            "name-key": "internet-provider",
+            "kind": "Text",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "701",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Firewall",
+            "name-key": "firewall",
+            "kind": "Tag",
+            "tag-type": "Configurations",
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "702",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Wi-Fi network",
+            "name-key": "wifi-network",
+            "kind": "Text",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "703",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Wi-Fi key",
+            "name-key": "wifi-key",
+            "kind": "Password",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "704",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Domain admin",
+            "name-key": "domain-admin",
+            "kind": "Tag",
+            "tag-type": "Passwords",
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "705",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "After-hours contact",
+            "name-key": "after-hours-contact",
+            "kind": "Text",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "706",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Backup window",
+            "name-key": "backup-window",
+            "kind": "Text",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        },
+        {
+          "id": "707",
+          "type": "flexible-asset-fields",
+          "attributes": {
+            "name": "Site notes",
+            "name-key": "site-notes",
+            "kind": "Textbox",
+            "tag-type": null,
+            "required": false,
+            "show-in-list": true
+          }
+        }
+      ],
+      "meta": {
+        "current-page": 1,
+        "next-page": null,
+        "total-pages": 1,
+        "total-count": 8
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "id": "itg.configurations.3101.psa-9131.hostile",
+  "scenarios": [
+    "hostile"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/configurations",
+    "query": {
+      "filter[organization_id]": 3101,
+      "filter[psa_id]": "9131",
+      "filter[psa_integration_type]": "manage"
+    }
+  },
+  "provenance": {
+    "status": "hostile",
+    "note": "Upstream returns an extra configuration from organization 3215 (another client). The connector must drop it."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": "553214",
+          "type": "configurations",
+          "attributes": {
+            "organization-id": 3101,
+            "organization-name": "Northfield Dental",
+            "name": "NFD-FW01",
+            "hostname": "NFD-FW01",
+            "primary-ip": "10.20.0.1",
+            "serial-number": "FGT60FTK2209",
+            "configuration-type-name": "Firewall",
+            "configuration-status-name": "Active",
+            "operating-system-name": null,
+            "notes": "free text: not in the allowlist",
+            "updated-at": "2026-09-30T19:02:11.000Z"
+          }
+        },
+        {
+          "id": "561900",
+          "type": "configurations",
+          "attributes": {
+            "organization-id": 3215,
+            "organization-name": "Northfield Dental",
+            "name": "SUM-S-DC01",
+            "hostname": "SUM-S-DC01",
+            "primary-ip": "10.44.0.5",
+            "serial-number": "X9ZZ001",
+            "configuration-type-name": "Server",
+            "configuration-status-name": "Active",
+            "operating-system-name": "Windows Server 2022",
+            "notes": "free text: not in the allowlist",
+            "updated-at": "2026-09-30T19:02:11.000Z"
+          }
+        }
+      ],
+      "meta": {
+        "current-page": 1,
+        "next-page": null,
+        "total-pages": 1,
+        "total-count": 2
+      },
+      "links": {}
+    }
+  }
+}

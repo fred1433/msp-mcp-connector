@@ -1,0 +1,142 @@
+{
+  "id": "cw.open-tickets.northfield",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets",
+    "query": {
+      "conditions": "company/id=250 and closedFlag=false",
+      "orderBy": "id desc",
+      "page": 1,
+      "pageSize": 25
+    },
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/service/ticket.py"
+    ],
+    "note": "Ticket list filtered with conditions; response is a JSON array of tickets."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 48211,
+        "summary": "Front desk PCs cannot reach imaging share since this morning",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "In Progress"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4002,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 2 - Quick Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 48197,
+        "summary": "New hire account: dental hygienist starting Monday",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "Waiting Customer"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4085,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 3 - Normal Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-07T18:02:00Z",
+          "lastUpdated": "2026-10-08T16:20:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 48150,
+        "summary": "Replace toner in operatory 3 printer",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "Scheduled"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4038,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-05T14:30:00Z",
+          "lastUpdated": "2026-10-06T09:10:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,288 @@
+{
+  "id": "cw.open-tickets.summit-n.p2",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets",
+    "query": {
+      "conditions": "company/id=312 and closedFlag=false",
+      "orderBy": "id desc",
+      "page": 2,
+      "pageSize": 25
+    }
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py"
+    ],
+    "note": "Page 2 of 2, no rel=next."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 47007,
+        "summary": "Workstation patch follow-up #7",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4059,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47006,
+        "summary": "Workstation patch follow-up #6",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4058,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47005,
+        "summary": "Workstation patch follow-up #5",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4057,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47004,
+        "summary": "Workstation patch follow-up #4",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4056,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47003,
+        "summary": "Workstation patch follow-up #3",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4055,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47002,
+        "summary": "Workstation patch follow-up #2",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4054,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 47001,
+        "summary": "Workstation patch follow-up #1",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "New"
+        },
+        "company": {
+          "id": 312,
+          "identifier": "SUMMITACCT-N",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4053,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      }
+    ]
+  }
+}

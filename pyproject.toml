@@ -1,0 +1,30 @@
+[project]
+name = "support-handover-mcp"
+version = "0.1.0"
+description = "Read-only MCP connector for Claude: a support handover across ConnectWise PSA and IT Glue, with per-user scope and password fields excluded."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "mcp==2.3.0",
+  "httpx==0.28.1",
+  "pyjwt[crypto]==2.15.1",
+  "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+support-handover = "handover.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

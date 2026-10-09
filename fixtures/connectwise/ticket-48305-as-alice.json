@@ -1,0 +1,60 @@
+{
+  "id": "cw.ticket.48305.alice",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets/48305",
+    "query": {},
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py"
+    ],
+    "note": "Alice's PSA member can read this ticket, but it belongs to company 263, not to the client she named."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "id": 48305,
+      "summary": "Kennel camera NVR offline",
+      "recordType": "ServiceTicket",
+      "board": {
+        "id": 1,
+        "name": "Service Desk"
+      },
+      "status": {
+        "id": 16,
+        "name": "In Progress"
+      },
+      "company": {
+        "id": 263,
+        "identifier": "LAKEVIEWVET",
+        "name": "Lakeview Veterinary Partners"
+      },
+      "contact": {
+        "id": 4096,
+        "name": "Front desk"
+      },
+      "priority": {
+        "id": 8,
+        "name": "Priority 3 - Normal Response"
+      },
+      "owner": {
+        "id": 151,
+        "identifier": "bwest"
+      },
+      "closedFlag": false,
+      "_info": {
+        "dateEntered": "2026-10-08T15:12:00Z",
+        "lastUpdated": "2026-10-09T13:41:00Z",
+        "enteredBy": "portal",
+        "updatedBy": "bwest"
+      }
+    }
+  }
+}

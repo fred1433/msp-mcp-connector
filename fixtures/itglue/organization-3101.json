@@ -1,0 +1,32 @@
+{
+  "id": "itg.organization.3101",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Organization show; name differs from the PSA company name on purpose."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": {
+        "id": "3101",
+        "type": "organizations",
+        "attributes": {
+          "name": "Northfield Dental",
+          "short-name": "NFD",
+          "organization-type-name": "Customer",
+          "quick-notes": "not in the allowlist"
+        }
+      }
+    }
+  }
+}

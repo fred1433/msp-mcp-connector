@@ -1,0 +1,55 @@
+{
+  "id": "itg.configurations.3101.psa-9120",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/configurations",
+    "query": {
+      "filter[organization_id]": 3101,
+      "filter[psa_id]": "9120",
+      "filter[psa_integration_type]": "manage"
+    }
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "filter[psa_id] must be accompanied by filter[psa_integration_type] (reference). The 'admin-password' attribute is NOT in the documented schema: it is a hostile addition the allowlist must drop."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": "553201",
+          "type": "configurations",
+          "attributes": {
+            "organization-id": 3101,
+            "organization-name": "Northfield Dental",
+            "name": "NFD-FS01",
+            "hostname": "NFD-FS01",
+            "primary-ip": "10.20.0.10",
+            "serial-number": "CZJ2140B7Q",
+            "configuration-type-name": "Server",
+            "configuration-status-name": "Active",
+            "operating-system-name": "Windows Server 2022",
+            "notes": "free text: not in the allowlist",
+            "updated-at": "2026-09-30T19:02:11.000Z",
+            "admin-password": "Winter2026!Srv"
+          }
+        }
+      ],
+      "meta": {
+        "current-page": 1,
+        "next-page": null,
+        "prev-page": null,
+        "total-pages": 1,
+        "total-count": 1,
+        "filters": {}
+      },
+      "links": {}
+    }
+  }
+}

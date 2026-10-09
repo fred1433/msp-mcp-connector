@@ -1,0 +1,30 @@
+{
+  "id": "itg.organization.3101.slow",
+  "scenarios": [
+    "itglue_timeout"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101",
+    "query": {}
+  },
+  "provenance": {
+    "status": "hostile",
+    "note": "Upstream answers after the connector's timeout."
+  },
+  "response": {
+    "status": 200,
+    "delay": 1.5,
+    "headers": {},
+    "body": {
+      "data": {
+        "id": "3101",
+        "type": "organizations",
+        "attributes": {
+          "name": "Northfield Dental"
+        }
+      }
+    }
+  }
+}

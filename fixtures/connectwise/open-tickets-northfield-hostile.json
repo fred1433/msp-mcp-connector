@@ -1,0 +1,176 @@
+{
+  "id": "cw.open-tickets.northfield.hostile",
+  "scenarios": [
+    "hostile"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets",
+    "query": {
+      "conditions": "company/id=250 and closedFlag=false",
+      "orderBy": "id desc",
+      "page": 1,
+      "pageSize": 25
+    },
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "hostile",
+    "note": "Upstream misbehaves: a ticket of another company (348) inside a company/id=250 query. The connector must drop it."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 48211,
+        "summary": "Front desk PCs cannot reach imaging share since this morning",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "In Progress"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4002,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 2 - Quick Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 48197,
+        "summary": "New hire account: dental hygienist starting Monday",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "Waiting Customer"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4085,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 3 - Normal Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-07T18:02:00Z",
+          "lastUpdated": "2026-10-08T16:20:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 48150,
+        "summary": "Replace toner in operatory 3 printer",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "Scheduled"
+        },
+        "company": {
+          "id": 250,
+          "identifier": "NORTHFIELDDENT",
+          "name": "Northfield Dental Group"
+        },
+        "contact": {
+          "id": 4038,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 4 - Low"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-05T14:30:00Z",
+          "lastUpdated": "2026-10-06T09:10:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      },
+      {
+        "id": 48404,
+        "summary": "Payroll export failing (another client)",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "In Progress"
+        },
+        "company": {
+          "id": 348,
+          "identifier": "SUMMITACCT-S",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4001,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 3 - Normal Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      }
+    ]
+  }
+}

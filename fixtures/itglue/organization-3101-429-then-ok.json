@@ -1,0 +1,47 @@
+{
+  "id": "itg.organization.3101.429-then-ok",
+  "scenarios": [
+    "itglue_429_short"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Rate limited once with a short wait, then served."
+  },
+  "responses": [
+    {
+      "status": 429,
+      "headers": {
+        "Retry-After": "2"
+      },
+      "body": {
+        "errors": [
+          {
+            "status": "429"
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "headers": {},
+      "body": {
+        "data": {
+          "id": "3101",
+          "type": "organizations",
+          "attributes": {
+            "name": "Northfield Dental"
+          }
+        }
+      }
+    }
+  ]
+}

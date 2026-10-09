@@ -1,0 +1,33 @@
+{
+  "id": "itg.organization.3101.429",
+  "scenarios": [
+    "itglue_429"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Rate limited: the reference documents a 429 Too Many Requests. Retry-After is not documented; the header here is an assumption."
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Retry-After": "120"
+    },
+    "body": {
+      "errors": [
+        {
+          "status": "429",
+          "title": "Too Many Requests"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "itg.flexible-asset-fields.41.down",
+  "scenarios": [
+    "fields_unavailable"
+  ],
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/flexible_asset_types/41/relationships/flexible_asset_fields",
+    "query": {}
+  },
+  "provenance": {
+    "status": "hostile",
+    "note": "Field definitions cannot be loaded: every trait must be omitted."
+  },
+  "response": {
+    "status": 503,
+    "headers": {},
+    "body": {
+      "errors": [
+        {
+          "status": "503"
+        }
+      ]
+    }
+  }
+}

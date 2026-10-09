@@ -1,0 +1,66 @@
+{
+  "id": "cw.ticket.48211.notes",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets/48211/notes",
+    "query": {
+      "orderBy": "id desc",
+      "page": 1,
+      "pageSize": 8
+    },
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/service/ticket_note.py"
+    ],
+    "note": "Ticket notes; flags detailDescriptionFlag / internalAnalysisFlag / resolutionFlag."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 910342,
+        "ticketId": 48211,
+        "text": "Network profile on FD-01 flipped to Public after the update; file sharing blocked. Switched FD-01 back to Domain profile as a test: share reachable. FD-02 not yet done.",
+        "detailDescriptionFlag": false,
+        "internalAnalysisFlag": true,
+        "resolutionFlag": false,
+        "dateCreated": "2026-10-09T13:40:00Z",
+        "createdBy": "aking",
+        "internalFlag": true,
+        "externalFlag": false
+      },
+      {
+        "id": 910337,
+        "ticketId": 48211,
+        "text": "Pinged NFD-FS01: replies. SMB from FD-01 times out. Windows Update installed KB on FD-01/02 overnight.\nLocal admin password: Tr0ub4dor&3\nWill check firewall profile next.",
+        "detailDescriptionFlag": false,
+        "internalAnalysisFlag": true,
+        "resolutionFlag": false,
+        "dateCreated": "2026-10-09T13:26:00Z",
+        "createdBy": "aking",
+        "internalFlag": true,
+        "externalFlag": false
+      },
+      {
+        "id": 910331,
+        "ticketId": 48211,
+        "text": "Reception reports S: drive (imaging share) shows 'network path not found' on FD-01 and FD-02. Started around 8:05.",
+        "detailDescriptionFlag": true,
+        "internalAnalysisFlag": false,
+        "resolutionFlag": false,
+        "dateCreated": "2026-10-09T13:12:00Z",
+        "createdBy": "portal",
+        "internalFlag": false,
+        "externalFlag": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "id": "itg.configurations.3101.psa-9131",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/configurations",
+    "query": {
+      "filter[organization_id]": 3101,
+      "filter[psa_id]": "9131",
+      "filter[psa_integration_type]": "manage"
+    }
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Configuration synced from PSA configuration 9131."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": "553214",
+          "type": "configurations",
+          "attributes": {
+            "organization-id": 3101,
+            "organization-name": "Northfield Dental",
+            "name": "NFD-FW01",
+            "hostname": "NFD-FW01",
+            "primary-ip": "10.20.0.1",
+            "serial-number": "FGT60FTK2209",
+            "configuration-type-name": "Firewall",
+            "configuration-status-name": "Active",
+            "operating-system-name": null,
+            "notes": "free text: not in the allowlist",
+            "updated-at": "2026-09-30T19:02:11.000Z"
+          }
+        }
+      ],
+      "meta": {
+        "current-page": 1,
+        "next-page": null,
+        "prev-page": null,
+        "total-pages": 1,
+        "total-count": 1,
+        "filters": {}
+      },
+      "links": {}
+    }
+  }
+}

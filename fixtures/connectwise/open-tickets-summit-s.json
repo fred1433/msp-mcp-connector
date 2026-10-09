@@ -1,0 +1,67 @@
+{
+  "id": "cw.open-tickets.summit-s",
+  "request": {
+    "method": "GET",
+    "host": "api-na.myconnectwise.net",
+    "path": "/v4_6_release/apis/3.0/service/tickets",
+    "query": {
+      "conditions": "company/id=348 and closedFlag=false",
+      "orderBy": "id desc",
+      "page": 1,
+      "pageSize": 25
+    },
+    "credential": "alice"
+  },
+  "provenance": {
+    "status": "third-party",
+    "sources": [
+      "https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md",
+      "https://github.com/christaylorcodes/ConnectWiseManageAPI",
+      "https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py"
+    ],
+    "note": "Second client with the same display name."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": [
+      {
+        "id": 48404,
+        "summary": "Payroll export failing after update",
+        "recordType": "ServiceTicket",
+        "board": {
+          "id": 1,
+          "name": "Service Desk"
+        },
+        "status": {
+          "id": 16,
+          "name": "In Progress"
+        },
+        "company": {
+          "id": 348,
+          "identifier": "SUMMITACCT-S",
+          "name": "Summit Accounting"
+        },
+        "contact": {
+          "id": 4001,
+          "name": "Front desk"
+        },
+        "priority": {
+          "id": 8,
+          "name": "Priority 3 - Normal Response"
+        },
+        "owner": {
+          "id": 151,
+          "identifier": "aking"
+        },
+        "closedFlag": false,
+        "_info": {
+          "dateEntered": "2026-10-08T15:12:00Z",
+          "lastUpdated": "2026-10-09T13:41:00Z",
+          "enteredBy": "portal",
+          "updatedBy": "aking"
+        }
+      }
+    ]
+  }
+}

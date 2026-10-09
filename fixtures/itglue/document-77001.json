@@ -1,0 +1,49 @@
+{
+  "id": "itg.document.77001",
+  "request": {
+    "method": "GET",
+    "host": "api.itglue.com",
+    "path": "/organizations/3101/relationships/documents/77001",
+    "query": {}
+  },
+  "provenance": {
+    "status": "verified",
+    "sources": [
+      "https://api.itglue.com/developer/"
+    ],
+    "note": "Document show returns the document with a 'sections' attribute; section attributes resource-type and content. Exact nesting of each section object is an assumption; the adapter accepts flat or JSON:API-nested."
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": {
+        "id": "77001",
+        "type": "documents",
+        "attributes": {
+          "organization-id": 3101,
+          "name": "Imaging share (S:) troubleshooting",
+          "restricted": false,
+          "updated-at": "2026-08-21T10:05:00.000Z",
+          "sections": [
+            {
+              "id": 1,
+              "resource-type": "Document::Heading",
+              "content": "<h2>Imaging share (S:)</h2>"
+            },
+            {
+              "id": 2,
+              "resource-type": "Document::Text",
+              "content": "<p>Imaging workstations map S: to \\\\NFD-FS01\\Imaging over SMB.</p><p>If S: fails after Windows updates, check the network profile is Domain, not Public.</p><p>Service account password: Ch@ngeMe-2026</p>"
+            },
+            {
+              "id": 3,
+              "resource-type": "Document::Gallery",
+              "content": "<img src='x'>"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Acceptance tests (MCP over HTTP, fixtures for ConnectWise and IT Glue)
+        run: pytest -v
+      - name: Regenerate the demo trace and fail if it changed
+        run: |
+          python scripts/demo_trace.py
+          git diff --exit-code docs/demo-trace.md
+      - name: No secret from the fixtures in the published trace
+        run: |
+          ! grep -E "Tr0ub4dor|Winter2026!Srv|S3cret-Wifi|not-in-schema-psk|Ch@ngeMe|privAlice|privBob" docs/demo-trace.md
