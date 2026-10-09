@@ -152,15 +152,21 @@ grammar the code generates, and any request to a password endpoint.
 
 ```
 Claude (Team / Enterprise custom connector)
-   |  Streamable HTTP + OAuth bearer token (issued by the MSP's identity provider)
+   |  Streamable HTTP + OAuth bearer token
+   |  (token issued by the MSP's identity provider)
    v
-MCP server (official Python SDK)  ->  token check (iss, aud, exp, signature) + policy check, every request
+MCP server (official Python SDK)
+   |  every request: token check (iss, aud, exp, signature) + policy check
    |
-   +-- policy.json        principal -> clients, documents ; client_ref -> PSA company id -> IT Glue org id
-   +-- PSA credentials    principal -> that technician's API member keys (no shared fallback)
-   +-- ConnectWise adapter   allowlisted fields, company check on every record
-   +-- IT Glue adapter       allowlisted fields, field-kind filter, no password endpoint
-   +-- audit log             ids and decisions only
+   +-- policy.json        principal -> clients, documents
+   |                      client_ref -> PSA company id -> IT Glue org id
+   +-- PSA credentials    principal -> own API member keys, no shared fallback
+   +-- ConnectWise        allowlisted fields, company check on every record
+   +-- IT Glue            allowlisted fields, field-kind and field-name filter,
+   |                      no password endpoint
+   +-- content policy     secrets withheld from free text, lengths capped
+   +-- output budget      every result <= 24,000 characters, cuts flagged
+   +-- audit log          ids and decisions only, every call, failures too
 ```
 
 Details: [authorization model](docs/authorization.md), [API facts and assumptions](docs/api-assumptions.md),
