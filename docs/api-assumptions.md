@@ -16,7 +16,7 @@ Read on 2026-10-09.
 | Headers `x-api-key` and `Content-Type: application/vnd.api+json` | verified | [API reference](https://api.itglue.com/developer/) |
 | Regional hosts `api.itglue.com`, `api.eu.itglue.com`, `api.au.itglue.com` (setting `HANDOVER_ITGLUE_REGION`) | verified | [API reference](https://api.itglue.com/developer/) |
 | "a maximum of 3000 requests within a 5-minute window"; "A 429 Too Many Requests error code will be returned" | verified | [API reference](https://api.itglue.com/developer/) |
-| `Retry-After` on a 429 | **assumption** (not documented). The connector honours it if present, otherwise uses a bounded backoff | n/a |
+| `Retry-After` on a 429 | **assumption** (not documented). The connector reads it as seconds or as an HTTP date (RFC 9110) if present; otherwise it uses a bounded backoff and says the wait was its own | n/a |
 | Pagination `page[number]` / `page[size]` (max 1000, default 50). Not needed by the four tools: each IT Glue request is filtered by organization and ID and returns a few records. Paging IT Glue is listed as a dependency for broader tools | verified | [API reference](https://api.itglue.com/developer/), [Pagination help](https://help.itglue.kaseya.com/help/Content/1-admin/it-glue-api/pagination-in-the-it-glue-api.html) |
 | `GET /organizations/:id` | verified | [API reference](https://api.itglue.com/developer/) |
 | `GET /configurations` with `filter[organization_id]`, `filter[psa_id]` + `filter[psa_integration_type]` (values include `manage`) | verified (filters listed in the Configurations section; "must be accompanied by the filter for psa_integration_type") | [API reference](https://api.itglue.com/developer/) |
@@ -38,7 +38,7 @@ obtaining a developer account or a sandbox; the live check is an acceptance task
 
 | Fact used by the code | Status | Source |
 |---|---|---|
-| Basic auth `companyId+publicKey:privateKey` | third-party | [Nango: ConnectWise PSA](https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md), [ConnectPyse README](https://github.com/markciecior/ConnectPyse) |
+| Basic auth `companyId+publicKey:privateKey` | third-party | [ConnectWiseManageAPI, Connect-CWM.ps1 line 50](https://github.com/christaylorcodes/ConnectWiseManageAPI/blob/e7f08423c31a632b894f1b6c33de653c642b5274/ConnectWiseManageAPI/Public/Authentication/Connect-CWM.ps1#L50): `"$($Company)+$($PubKey):$($PrivateKey)"`; [Nango](https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md) describes the same in words |
 | `clientId` header required | third-party | [ConnectWiseManageAPI](https://github.com/christaylorcodes/ConnectWiseManageAPI) ("As of 8/14/2019 ConnectWise requires the use of a Client ID"), [ConnectPyse README](https://github.com/markciecior/ConnectPyse) |
 | Host `api-na.myconnectwise.net` (also `api-eu`, `api-au`) and path `/v4_6_release/apis/3.0` | third-party | [Nango](https://www.nango.dev/docs/api-integrations/connectwise-psa/connect.md), [ConnectPyse README](https://github.com/markciecior/ConnectPyse) |
 | Query parameters `conditions`, `orderBy`, `page`, `pageSize` (max 1000) | third-party | [ConnectPyse cw_controller.py](https://github.com/markciecior/ConnectPyse/blob/master/connectpyse/cw_controller.py), [pyconnectwise README](https://github.com/HealthITAU/pyconnectwise) |
@@ -54,8 +54,9 @@ obtaining a developer account or a sandbox; the live check is an acceptance task
 
 | Budget | Value | Vendor limit it stays under |
 |---|---|---|
-| Records per result | 25 | n/a |
-| Output per result | 24,000 characters | Claude: ~150,000 characters per tool result |
+| Records per result (tickets, configurations) | 25, then `has_more` | n/a |
+| Text per note or text field | 600 characters, cut flagged | n/a |
+| Output per result (any tool, whole result) | 24,000 characters, cut flagged with `truncated` | Claude: ~150,000 characters per tool result |
 | Time per tool call | 20 s | Claude: 240 s per tool call |
 | Upstream pages per call | 4 | n/a |
 | Upstream timeout | 8 s per request | n/a |

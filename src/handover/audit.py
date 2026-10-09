@@ -22,6 +22,10 @@ ALLOWED_KEYS = {
 }
 
 
+class AuditUnavailable(Exception):
+    """The audit record could not be written: the call must not return data."""
+
+
 class AuditLog:
     def __init__(self, path: Path | None = None, stream: TextIO | None = None) -> None:
         self.path = Path(path) if path else None
@@ -61,10 +65,13 @@ class AuditLog:
         assert set(entry) == ALLOWED_KEYS
         line = json.dumps(entry, sort_keys=True)
         with self._lock:
+            try:
+                if self.path:
+                    with self.path.open("a") as fh:
+                        fh.write(line + "\n")
+                elif self.stream is not None:
+                    self.stream.write(line + "\n")
+            except OSError:
+                raise AuditUnavailable() from None
             self.records.append(entry)
-            if self.path:
-                with self.path.open("a") as fh:
-                    fh.write(line + "\n")
-            elif self.stream is not None:
-                self.stream.write(line + "\n")
         return entry

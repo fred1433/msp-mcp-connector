@@ -60,7 +60,8 @@ def build(settings: Settings, *, upstream_transport: httpx.AsyncBaseTransport | 
     cw = ConnectWise(settings.connectwise_base_url, settings.connectwise_client_id, http,
                      SharedBudget(b.connectwise_requests_per_window, b.window_s), b, **kwargs)
     itg = ITGlue(settings.itglue_base_url, settings.itglue_api_key, http,
-                 SharedBudget(b.itglue_requests_per_window, b.window_s), b, **kwargs)
+                 SharedBudget(b.itglue_requests_per_window, b.window_s), b,
+                 site_summary_type_id=settings.itglue_site_summary_type_id, **kwargs)
     handover = Handover(policy=policy, credentials=CredentialStore(settings.credentials_file), connectwise=cw,
                         itglue=itg, cursors=CursorCodec(settings.cursor_secret), audit=audit, budgets=b)
     if clock_iso:

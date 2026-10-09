@@ -44,30 +44,50 @@ client's company ID. If a name matches several clients, `resolve_client` returns
 looked up until one `client_ref` is chosen (`test_same_display_name_is_ambiguous_and_stops`). Configurations are
 joined by PSA configuration ID through IT Glue's `filter[psa_id]` with `filter[psa_integration_type]=manage`.
 
-## 5. Password fields
+## 5. Password fields and secrets in text
 
 1. No code path calls a password endpoint or requests password relationships (`test_no_password_endpoint_is_ever_called`).
 2. Outputs are built field by field from allowlists; an unexpected attribute such as `admin-password` on a
-   configuration is dropped.
+   configuration is dropped (`test_password_fields_absent_from_output_and_audit`).
 3. Flexible asset traits are kept only when the field definition says they are a safe kind. `Password` fields and
    `Tag` fields whose `tag-type` is `Passwords` are excluded; traits absent from the definitions are dropped; if the
    definitions cannot be loaded, every trait is omitted (`test_schema_unavailable_omits_all_traits`).
-4. Deployment setting: IT Glue documents "an optional Password Access setting ... for each API key" and "Password
+4. A field whose **name** suggests a secret (contains pass, pwd, PIN, PSK, key, secret, credential, creds, token,
+   MFA, OTP or code) is omitted whatever its kind, because home-made templates often keep secrets in Text fields
+   (`test_a2_site_summary_secret_named_text_field_and_big_text`, `test_secret_sounding_field_names`). This errs on
+   the side of omission: a field named "Postal code" is omitted too.
+5. Deployment setting: IT Glue documents "an optional Password Access setting ... for each API key" and "Password
    values can be accessed from the Passwords API only if this setting is enabled"
    ([Getting started with the IT Glue API](https://help.itglue.kaseya.com/help/Content/1-admin/it-glue-api/getting-started-with-the-it-glue-api.html)).
    Generate the key with that setting off. Fixtures cannot prove how a real key is configured; this stays an
    acceptance task.
 
-Free text (ticket notes, document sections, Textbox fields) cannot be allowlisted field by field. It passes through
-a separate content policy (`src/handover/content.py`) that withholds lines that look like credentials and caps
-length. It is a safety net with known limits (a password written in a sentence without a label will pass), which is
-why the demo uses synthetic, approved excerpts only.
+Free text and text fields (ticket summaries and notes, document sections, Text and Textbox traits) cannot be
+allowlisted field by field. They pass through a separate content policy (`src/handover/content.py`) that withholds:
+
+- any line containing a secret word (password, passcode, pass, pwd, pw, PIN, PSK, key, secret, token, credential,
+  creds, MFA, OTP, backup / recovery / door code, "mot de passe"), whatever the separator (`:`, `=`, `-`, `is`,
+  `set to`, a space);
+- the next non-empty line when such a line ends with a label and no value (`Password:` then the value below);
+- command lines carrying a password (`net user NAME VALUE`, `sshpass`, `-p VALUE`, `admin ... / VALUE`);
+- PEM private keys, terminated or not.
+
+Each form has its own test in `tests/test_content_policy.py`. The policy prefers withholding: a harmless line such
+as "Key contact: Dr Lee" is withheld too. Its limit: a secret written with none of these words or shapes
+("the usual one is Hunter2") is not detected. That is why the demo uses synthetic, approved excerpts only, and why
+the IT Glue key should have Password Access off.
+
+Every text value is also capped (600 characters for notes and text fields, 300 for names), and a cut is flagged
+(`truncated`, `truncated_fields`).
 
 ## 6. Audit
 
-One JSON line per tool call: principal, client reference, tool, source record IDs, decision, reason code, policy
-version, timestamp, correlation ID. Never: record content, note text, credentials, tokens, upstream bodies or
-upstream exception messages (`test_every_call_is_audited_without_content`).
+One JSON line per tool call, including calls that fail: principal, client reference, tool, source record IDs,
+decision (`allowed`, `partial`, `refused`, `failed`, `error`), reason code, policy version, timestamp, correlation
+ID. Never: record content, note text, credentials, tokens, upstream bodies or upstream exception messages; an
+unexpected error is recorded as `internal_error:<exception class>` only (`test_every_call_is_audited_without_content`,
+`test_a3_unexpected_internal_error_is_audited`). If the audit line cannot be written, the call returns no data
+(`test_a3_unwritable_audit_log_returns_no_data`).
 
 ## 7. Revocation and disabling
 

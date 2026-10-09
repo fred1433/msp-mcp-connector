@@ -1,25 +1,27 @@
 """The four read-only tools, independent of the MCP transport.
 
-resolve_client      -> which client do you mean (by internal reference, never joined by name)
-list_open_tickets   -> open PSA tickets for one client, paginated with a bound cursor
-get_ticket_context  -> one ticket, its history, the IT Glue configurations it concerns,
-                       and the client's site summary, each fact with its source
-get_document_excerpt-> an approved excerpt of one IT Glue document
+resolve_client       -> which client do you mean (by internal reference, never joined by name)
+list_open_tickets    -> open PSA tickets for one client, paginated with a bound cursor
+get_ticket_context   -> one ticket, its history, the IT Glue configurations it concerns,
+                        and the client's site summary, each fact with its source
+get_document_excerpt -> an approved excerpt of one IT Glue document
 
 Every call: principal from the validated token, grant from the policy, client
 link from the policy, upstream calls with that principal's PSA credentials,
-output built from allowlists, one audit record.
+output built from allowlists, the output budget applied to the whole result,
+and one audit record, including when the call fails.
 """
 
 from __future__ import annotations
 
-import hashlib
+import functools
 import json
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from .audit import AuditLog
+from .audit import AuditLog, AuditUnavailable
 from .config import Budgets
 from .connectwise import ConnectWise
 from .credentials import CredentialStore
@@ -29,13 +31,103 @@ from .itglue import DocumentRestricted, ITGlue
 from .policy import ClientLink, Grant, Policy, PolicyError
 from .upstream import Deadline, SourceUnavailable
 
+TRUNCATION_MESSAGE = "Part of this result was cut to stay within the output budget; ask for a narrower item to see more."
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _size(obj: Any) -> int:
-    return len(json.dumps(obj, ensure_ascii=False))
+    return len(json.dumps(obj))  # escaped form: the larger of the two encodings
+
+
+def _longest_string(obj: Any, path: tuple = ()) -> tuple[int, tuple] | None:
+    best = None
+    if isinstance(obj, str):
+        return (len(obj), path)
+    items = obj.items() if isinstance(obj, dict) else enumerate(obj) if isinstance(obj, list) else []
+    for k, v in items:
+        if k in ("source", "correlation_id", "cursor", "status", "reason"):
+            continue
+        cand = _longest_string(v, path + (k,))
+        if cand and (best is None or cand[0] > best[0]):
+            best = cand
+    return best
+
+
+def _longest_list(obj: Any, path: tuple = ()) -> tuple[int, tuple] | None:
+    best = None
+    if isinstance(obj, list):
+        best = (len(obj), path)
+    items = obj.items() if isinstance(obj, dict) else enumerate(obj) if isinstance(obj, list) else []
+    for k, v in items:
+        if k == "sources":
+            continue
+        cand = _longest_list(v, path + (k,))
+        if cand and cand[0] > 0 and (best is None or cand[0] > best[0]):
+            best = cand
+    return best
+
+
+def _get(obj: Any, path: tuple) -> Any:
+    for k in path:
+        obj = obj[k]
+    return obj
+
+
+def enforce_budget(out: dict, limit: int) -> dict:
+    """Bring any tool result under `limit` characters, and say so when something was cut.
+    First halves the longest strings, then drops trailing list items, then gives up on content."""
+    if _size(out) <= limit:
+        return out
+    out["truncated"] = True
+    out["truncation_message"] = TRUNCATION_MESSAGE
+    for _ in range(200):
+        if _size(out) <= limit:
+            return out
+        longest = _longest_string(out)
+        if not longest or longest[0] <= 120:
+            break
+        parent, key = _get(out, longest[1][:-1]), longest[1][-1]
+        parent[key] = parent[key][: max(100, longest[0] // 2)] + "…"
+    for _ in range(2000):
+        if _size(out) <= limit:
+            return out
+        lst = _longest_list(out)
+        if not lst or lst[0] == 0:
+            break
+        _get(out, lst[1]).pop()
+    keep = {k: out[k] for k in ("status", "reason", "client", "sources", "correlation_id") if k in out}
+    keep.update({"truncated": True, "truncation_message": "The result was too large to return within the output budget."})
+    return keep
+
+
+def audited(tool: str):
+    """Every tool call leaves an audit line, including when it fails unexpectedly."""
+
+    def deco(fn):
+        @functools.wraps(fn)
+        async def wrapper(self: "Handover", principal: Principal | None, *args, **kwargs):
+            ctx = self._ctx(tool, principal, kwargs.get("client_ref") or (args[0] if args and tool != "resolve_client" else None))
+            try:
+                out = await fn(self, ctx, principal, *args, **kwargs)
+                return enforce_budget(out, self.budgets.max_output_chars)
+            except AuditUnavailable:
+                print(f"audit unavailable: {tool} {ctx['cid']}", file=sys.stderr)
+                return {"status": "error", "reason": "audit_unavailable", "correlation_id": ctx["cid"],
+                        "message": "The audit log could not be written, so no data is returned."}
+            except Exception as exc:  # noqa: BLE001 - fail closed, audit without content
+                try:
+                    self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=ctx.get("client_ref"),
+                                      tool=tool, decision="error", reason=f"internal_error:{type(exc).__name__}",
+                                      policy_version=self._policy_version())
+                except Exception:  # noqa: BLE001
+                    print(f"audit unavailable: {tool} {ctx['cid']}", file=sys.stderr)
+                return {"status": "error", "reason": "internal_error", "correlation_id": ctx["cid"],
+                        "message": "The connector hit an unexpected error; nothing was returned. Quote the correlation_id."}
+        return wrapper
+    return deco
 
 
 @dataclass
@@ -50,10 +142,16 @@ class Handover:
     clock_iso: Callable[[], str] = _now_iso
 
     # ------------------------------------------------------------------ helpers
+    def _policy_version(self) -> str:
+        try:
+            return self.policy.version
+        except Exception:  # noqa: BLE001
+            return "unreadable"
+
     def _refusal(self, ctx: dict, err: PolicyError) -> dict:
         self.audit.record(
             correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=ctx.get("client_ref"),
-            tool=ctx["tool"], decision="refused", reason=err.code, policy_version=self.policy.version,
+            tool=ctx["tool"], decision="refused", reason=err.code, policy_version=self._policy_version(),
         )
         return {"status": "refused", "reason": err.code, "message": err.message, "correlation_id": ctx["cid"]}
 
@@ -69,8 +167,8 @@ class Handover:
         return {"system": system, "record": record, "fetched_at": self.clock_iso()}
 
     # ------------------------------------------------------------ resolve_client
-    async def resolve_client(self, principal: Principal | None, query: str) -> dict:
-        ctx = self._ctx("resolve_client", principal, None)
+    @audited("resolve_client")
+    async def resolve_client(self, ctx: dict, principal: Principal | None, query: str) -> dict:
         try:
             grant = self.policy.grant(principal)
         except PolicyError as err:
@@ -85,12 +183,11 @@ class Handover:
             for l in matches
         ]
         names = [c["display_name"].casefold() for c in candidates]
-        ambiguous = len(candidates) > 1
         out: dict[str, Any] = {"status": "ok", "candidates": candidates, "correlation_id": ctx["cid"]}
         if not candidates:
             out["status"] = "no_match"
             out["message"] = "No client you are authorized for matches this name or reference."
-        elif ambiguous:
+        elif len(candidates) > 1:
             out["status"] = "ambiguous"
             same = len(set(names)) < len(names)
             out["message"] = (
@@ -100,13 +197,13 @@ class Handover:
         self.audit.record(
             correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=None, tool=ctx["tool"],
             decision=out["status"], reason="resolved" if out["status"] == "ok" else out["status"],
-            policy_version=self.policy.version, source_ids=[f"policy:{c['client_ref']}" for c in candidates],
+            policy_version=self._policy_version(), source_ids=[f"policy:{c['client_ref']}" for c in candidates],
         )
         return out
 
     # --------------------------------------------------------- list_open_tickets
-    async def list_open_tickets(self, principal: Principal | None, client_ref: str, cursor: str | None = None) -> dict:
-        ctx = self._ctx("list_open_tickets", principal, client_ref)
+    @audited("list_open_tickets")
+    async def list_open_tickets(self, ctx: dict, principal: Principal | None, client_ref: str, cursor: str | None = None) -> dict:
         deadline = Deadline.after(self.budgets.tool_deadline_s)
         query_key = "open"
         try:
@@ -116,40 +213,53 @@ class Handover:
             if cursor:
                 state = self.cursors.decode(cursor, principal=grant.principal.key, client_ref=client_ref,
                                             tool=ctx["tool"], query=query_key)
-        except PolicyError as err:
+            page, skip = int(state["page"]), int(state["skip"])
+            if page < 1 or skip < 0:
+                raise PolicyError("invalid_cursor", "This cursor is malformed.")
+        except (PolicyError, KeyError, TypeError, ValueError) as err:
+            if not isinstance(err, PolicyError):
+                err = PolicyError("invalid_cursor", "This cursor is malformed.")
             return self._refusal(ctx, err)
 
+        # Ticket list budget: leave room for the envelope around the tickets.
+        list_budget = max(500, self.budgets.max_output_chars - 1500)
         tickets: list[dict] = []
-        excluded = 0
+        excluded = oversized = 0
         has_more = False
         next_state: dict | None = None
-        page, skip = int(state["page"]), int(state["skip"])
         unavailable: list[dict] = []
         pages_read = 0
         try:
-            while len(tickets) < self.budgets.max_records and pages_read < self.budgets.max_upstream_pages:
+            while True:
+                if pages_read >= self.budgets.max_upstream_pages:
+                    has_more, next_state = True, {"page": page, "skip": skip}
+                    break
                 rows, more = await self.connectwise.open_tickets(cred, link.psa_company_id, page, deadline)
                 pages_read += 1
+                stop = False
                 for i, row in enumerate(rows):
                     if i < skip:
                         continue
                     if row["company_id"] != link.psa_company_id:
                         excluded += 1  # upstream returned a record outside the requested client
                         continue
-                    row["source"] = self._source("connectwise", f"service/tickets/{row['id']}")
-                    candidate = tickets + [row]
-                    if len(candidate) > self.budgets.max_records or _size(candidate) > self.budgets.max_output_chars:
-                        has_more, next_state = True, {"page": page, "skip": i}
+                    if len(tickets) >= self.budgets.max_records:
+                        has_more, next_state, stop = True, {"page": page, "skip": i}, True
                         break
-                    tickets = candidate
-                if next_state:
+                    row["source"] = self._source("connectwise", f"service/tickets/{row['id']}")
+                    if _size(tickets + [row]) > list_budget:
+                        if not tickets:
+                            oversized += 1  # cannot fit even alone: skipped and flagged, the cursor moves past it
+                            continue
+                        has_more, next_state, stop = True, {"page": page, "skip": i}, True
+                        break
+                    tickets.append(row)
+                if stop:
                     break
                 skip = 0
-                if not more:
+                if not more or not rows:
                     break
                 page += 1
-                if len(tickets) >= self.budgets.max_records or pages_read >= self.budgets.max_upstream_pages:
-                    has_more, next_state = True, {"page": page, "skip": 0}
         except SourceUnavailable as err:
             unavailable.append(err.public())
 
@@ -164,23 +274,26 @@ class Handover:
         if has_more and next_state:
             out["cursor"] = self.cursors.encode(principal=grant.principal.key, client_ref=client_ref,
                                                 tool=ctx["tool"], query=query_key, state=next_state)
-            out["message"] = "More open tickets exist. Call again with this cursor, or narrow the request."
+            out["message"] = "More open tickets may exist. Call again with this cursor."
         if unavailable:
             out["message"] = ("ConnectWise could not be fully read; the list below is incomplete, "
                               "not a statement that the client has no other open tickets.")
         if excluded:
             out["excluded_out_of_scope_records"] = excluded
+        if oversized:
+            out["skipped_oversized_records"] = oversized
+            out["truncated"] = True
         self.audit.record(
             correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref, tool=ctx["tool"],
             decision="partial" if unavailable else "allowed", reason="ok" if not excluded else "out_of_scope_excluded",
-            policy_version=self.policy.version, source_ids=[f"cw:ticket/{t['id']}" for t in tickets],
+            policy_version=self._policy_version(), source_ids=[f"cw:ticket/{t['id']}" for t in tickets],
             sources_unavailable=[u["system"] for u in unavailable],
         )
         return out
 
     # -------------------------------------------------------- get_ticket_context
-    async def get_ticket_context(self, principal: Principal | None, client_ref: str, ticket_id: int) -> dict:
-        ctx = self._ctx("get_ticket_context", principal, client_ref)
+    @audited("get_ticket_context")
+    async def get_ticket_context(self, ctx: dict, principal: Principal | None, client_ref: str, ticket_id: int) -> dict:
         deadline = Deadline.after(self.budgets.tool_deadline_s)
         try:
             grant, link = self._grant_and_link(principal, client_ref)
@@ -199,7 +312,7 @@ class Handover:
         except SourceUnavailable as err:
             self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
                               tool=ctx["tool"], decision="failed", reason=f"connectwise_{err.code}",
-                              policy_version=self.policy.version, sources_unavailable=["connectwise"])
+                              policy_version=self._policy_version(), sources_unavailable=["connectwise"])
             return {"status": "unavailable", "sources": [err.public()], "correlation_id": ctx["cid"],
                     "message": "The ticket could not be read from ConnectWise; no handover can be prepared."}
         if ticket["company_id"] != link.psa_company_id:
@@ -229,12 +342,14 @@ class Handover:
             org = await self.itglue.organization(link.itglue_organization_id, deadline)
             if org["id"] != link.itglue_organization_id:
                 raise SourceUnavailable("itglue", "unexpected_record", "IT Glue returned a different organization.")
-            documented, excluded_cfg = await self.itglue.configurations_for_psa_ids(
+            documented, excluded_cfg, more_cfg = await self.itglue.configurations_for_psa_ids(
                 link.itglue_organization_id, psa_config_ids, deadline)
             for c in documented:
                 c["source"] = self._source("itglue", f"configurations/{c['id']}")
                 source_ids.append(f"itg:configuration/{c['id']}")
             out["configurations"] = documented
+            if more_cfg:
+                out["configurations_has_more"] = True
             summary = await self.itglue.site_summary(link.itglue_organization_id, deadline)
             if summary is not None:
                 summary["source"] = self._source("itglue", f"flexible_assets/{summary['id']}")
@@ -257,17 +372,17 @@ class Handover:
         else:
             out["status"] = "ok"
         out["correlation_id"] = ctx["cid"]
-        self._fit(out)
+        self._fit_history(out)
         self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
                           tool=ctx["tool"], decision="partial" if unavailable else "allowed", reason="ok",
-                          policy_version=self.policy.version, source_ids=source_ids, sources_unavailable=unavailable)
+                          policy_version=self._policy_version(), source_ids=source_ids, sources_unavailable=unavailable)
         return out
 
-    def _fit(self, out: dict) -> None:
-        """Keep the result under the output budget by dropping the oldest history first."""
+    def _fit_history(self, out: dict) -> None:
+        """Before the generic budget applies, drop the oldest history first: it matters least in a handover."""
         history = out.get("history") or []
         dropped = 0
-        while history and _size(out) > self.budgets.max_output_chars:
+        while len(history) > 1 and _size(out) > self.budgets.max_output_chars:
             history.pop(0)
             dropped += 1
         if dropped:
@@ -275,8 +390,8 @@ class Handover:
                                         "message": "Older notes were left out to stay within the output budget."}
 
     # ------------------------------------------------------ get_document_excerpt
-    async def get_document_excerpt(self, principal: Principal | None, client_ref: str, document_id: int) -> dict:
-        ctx = self._ctx("get_document_excerpt", principal, client_ref)
+    @audited("get_document_excerpt")
+    async def get_document_excerpt(self, ctx: dict, principal: Principal | None, client_ref: str, document_id: int) -> dict:
         deadline = Deadline.after(self.budgets.tool_deadline_s)
         try:
             grant, link = self._grant_and_link(principal, client_ref)
@@ -293,7 +408,7 @@ class Handover:
         except SourceUnavailable as err:
             self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
                               tool=ctx["tool"], decision="failed", reason=f"itglue_{err.code}",
-                              policy_version=self.policy.version, sources_unavailable=["itglue"])
+                              policy_version=self._policy_version(), sources_unavailable=["itglue"])
             return {"status": "unavailable", "sources": [err.public()], "correlation_id": ctx["cid"],
                     "message": "IT Glue could not be consulted; the document may exist but was not read."}
         if doc["organization_id"] != link.itglue_organization_id:
@@ -301,11 +416,7 @@ class Handover:
                                                   f"Document {document_id} does not belong to client {client_ref}."))
         doc["source"] = self._source("itglue", f"organizations/{link.itglue_organization_id}/relationships/documents/{document_id}")
         self.audit.record(correlation_id=ctx["cid"], principal=ctx["principal"], client_ref=client_ref,
-                          tool=ctx["tool"], decision="allowed", reason="ok", policy_version=self.policy.version,
+                          tool=ctx["tool"], decision="allowed", reason="ok", policy_version=self._policy_version(),
                           source_ids=[f"itg:document/{document_id}"])
         return {"status": "ok", "client": {"client_ref": link.client_ref, "display_name": link.display_name},
                 "document": doc, "sources": [{"system": "itglue", "status": "ok"}], "correlation_id": ctx["cid"]}
-
-
-def query_fingerprint(*parts: Any) -> str:
-    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:16]

@@ -9,6 +9,7 @@ Where this repository makes its own choice, it says so.
 |---|---|---|
 | Transport | "Use Streamable HTTP, which the MCP specification defines for remote servers. Claude also supports the legacy HTTP+SSE transport, which is being deprecated in favor of Streamable HTTP." | [Building connectors](https://claude.com/docs/connectors/building) |
 | Reachability | "Claude reaches your server from Anthropic's infrastructure, so a server running on your machine needs a public URL." | [Testing](https://claude.com/docs/connectors/building/testing) |
+| Private network option | "MCP tunnels are in research preview and are available to organizations on the Claude Enterprise plan by request." A tunnel stack inside the network "opens an outbound-only connection to Anthropic"; "Your firewall needs no inbound rules and your MCP servers need no public endpoint." Each server behind a tunnel still needs its own OAuth. | [MCP tunnels](https://claude.com/docs/connectors/mcp-tunnels/overview) |
 | Egress IPs | "Anthropic's outbound traffic to your server originates from `160.79.104.0/21`." | [Authentication](https://claude.com/docs/connectors/building/authentication), [IP addresses](https://platform.claude.com/docs/en/api/ip-addresses) |
 | Identity provider reachability | The authorization server "must also be reachable from Anthropic's published egress range", and a WAF in front of the identity provider can break the flow. | [Authentication](https://claude.com/docs/connectors/building/authentication) |
 | OAuth is optional | Three modes are listed: OAuth 2.0, a static credential, or no authentication. | [Authentication](https://claude.com/docs/connectors/building/authentication) |
@@ -28,8 +29,11 @@ Where this repository makes its own choice, it says so.
 - **OAuth**: chosen here, although Claude does not require it, because it is the only mode that gives a per-user identity. The server is an OAuth *resource server* only. Tokens are issued by the MSP's existing identity provider; the server validates signature, `iss`, `aud` and `exp` with PyJWT against the provider's JWKS, and answers `401` with a `resource_metadata` pointer (tested: `test_missing_token_gets_401_with_resource_metadata`). No identity provider is written here.
 - **Audience**: `HANDOVER_AUDIENCE` must equal what the identity provider puts in `aud` for this API, and `HANDOVER_RESOURCE_URL` must equal the URL the Owner types in Claude.
 - **Every HTTP request is re-authorized**: the token is checked, then the principal is looked up in the policy. A disabled principal gets `401` at its next request, inside an open session (tested: `test_revocation_after_a_successful_request`).
-- **Size and time budgets**: results are capped at 24,000 characters and each tool call at 20 seconds, both well under the limits above. These are this repository's choices.
+- **Size and time budgets**: every tool result is capped at 24,000 characters (measured on the escaped JSON), with a `truncated` flag when something was cut, and each tool call at 20 seconds; both well under the limits above. These are this repository's choices (`test_a3_200k_text_field_stays_under_the_output_budget`, `test_every_tool_result_is_capped_and_flagged`).
 - **Research mode**: because tools can be called without per-call approval there, the server exposes no write tool at all. Any future write needs an authenticated human approval that the model cannot produce (see README, Deferred).
+- **Not on the internet?** If the MSP will not expose this server publicly, MCP tunnels (Enterprise, research
+  preview, on request) are the documented route. This server already speaks Streamable HTTP and requires OAuth, which
+  is what a tunnelled server needs. Not tested here.
 - **IP allowlist**: restricting inbound traffic to `160.79.104.0/21` (plus the identity provider path) is a reasonable network layer. This repository treats it as a complement to token validation, never a replacement. That position is ours; the documentation does not state it either way.
 
 ## Administrator steps
@@ -47,6 +51,11 @@ Two notes from the same page: "On Team and Enterprise plans, an Owner adds the c
 
 - Register an application for this API; its identifier is the `aud` the server expects.
 - Register `https://claude.ai/api/mcp/auth_callback` as the redirect URI of the client Claude uses.
+- With Microsoft Entra ID: "you must also register the MCP server URL as an Application ID URI on your Entra app
+  registration, or the token request fails with `AADSTS9010010`", and Entra accepts it "only when it's on a domain
+  your tenant has verified", so the server needs a custom domain rather than a platform hostname such as
+  `*.azurewebsites.net` ([Authentication](https://claude.com/docs/connectors/building/authentication),
+  [Microsoft identifier URI restrictions](https://learn.microsoft.com/en-us/entra/identity-platform/identifier-uri-restrictions)).
 - Confirm the provider supports PKCE S256 and is reachable from `160.79.104.0/21`.
 - Decide how a token's `sub` maps to a technician (policy file today; a directory group sync later).
 

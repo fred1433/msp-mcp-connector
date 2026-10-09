@@ -57,6 +57,8 @@ class Settings:
     itglue_api_key: str = ""
     connectwise_base_url: str = "https://api-na.myconnectwise.net/v4_6_release/apis/3.0"
     connectwise_client_id: str = ""
+    # IT Glue flexible asset type used as the client's site summary; None disables that part.
+    itglue_site_summary_type_id: int | None = None
     budgets: Budgets = field(default_factory=Budgets)
 
     @property
@@ -90,4 +92,6 @@ class Settings:
             itglue_api_key=req("HANDOVER_ITGLUE_API_KEY"),
             connectwise_base_url=os.environ.get("HANDOVER_CW_BASE_URL", cls.connectwise_base_url),
             connectwise_client_id=req("HANDOVER_CW_CLIENT_ID"),
+            itglue_site_summary_type_id=int(os.environ["HANDOVER_ITGLUE_SITE_SUMMARY_TYPE_ID"])
+            if os.environ.get("HANDOVER_ITGLUE_SITE_SUMMARY_TYPE_ID") else None,
         )

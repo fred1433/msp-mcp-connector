@@ -10,7 +10,10 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from collections import deque
 from dataclasses import dataclass
 from typing import Awaitable, Callable
@@ -66,14 +69,26 @@ class Deadline:
         return max(0.0, self.at - self.clock())
 
 
-def _retry_after_seconds(resp: httpx.Response) -> float | None:
+def _retry_after_seconds(resp: httpx.Response, now: Callable[[], float] = time.time) -> float | None:
+    """Retry-After as delta-seconds or as an HTTP date (RFC 9110). None if absent or unreadable."""
     value = resp.headers.get("Retry-After")
     if value is None:
         return None
     try:
-        return max(0.0, float(value))
+        seconds = float(value)
     except ValueError:
+        try:
+            when = parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError):
+            return None
+        if when is None:
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0.0, when.timestamp() - now())
+    if math.isnan(seconds) or math.isinf(seconds):
         return None
+    return max(0.0, seconds)
 
 
 async def send(
@@ -106,13 +121,18 @@ async def send(
             raise SourceUnavailable(system, "connection_error", "The source could not be reached.") from None
 
         if resp.status_code == 429:
-            wait = _retry_after_seconds(resp)
-            wait = 1.0 * (2**attempt) if wait is None else wait
+            asked = _retry_after_seconds(resp)
+            wait = 1.0 * (2**attempt) if asked is None else asked
             if attempt < max_retries and wait <= max_retry_wait_s and wait < deadline.remaining():
                 attempt += 1
                 await sleep(wait)
                 continue
-            raise SourceUnavailable(system, "rate_limited", f"The source asked to wait {wait:.0f}s; not retried within this call.")
+            if asked is None:
+                detail = (f"The source answered 429 Too Many Requests {attempt + 1} time(s) without a usable "
+                          "Retry-After; gave up after a bounded backoff.")
+            else:
+                detail = f"The source asked to wait {asked:.0f}s (Retry-After); not retried within this call."
+            raise SourceUnavailable(system, "rate_limited", detail)
         if resp.status_code >= 500:
             if attempt < max_retries and deadline.remaining() > 1.0:
                 attempt += 1

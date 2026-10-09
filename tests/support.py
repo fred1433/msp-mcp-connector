@@ -33,6 +33,7 @@ def _b64(n: int) -> str:
 
 
 class TestIdP:
+    __test__ = False
     """Signs tokens like the MSP's identity provider would. Test only."""
 
     def __init__(self, kid: str = "test-key-1") -> None:
@@ -71,13 +72,14 @@ class Running:
         self.server.should_exit = True
 
 
-def start(tmp: Path, *, budgets: Budgets | None = None, scenario: str = "default") -> Running:
+def start(tmp: Path, *, budgets: Budgets | None = None, scenario: str = "default",
+          site_summary_type_id: int | None = 41, fixtures: Path | None = None) -> Running:
     port = free_port()
     resource = f"http://127.0.0.1:{port}/mcp"
     policy_path = tmp / "policy.json"
     shutil.copy(ROOT / "config" / "policy.example.json", policy_path)
     idp = TestIdP()
-    transport = FixtureTransport(ROOT / "fixtures", scenario=scenario)
+    transport = FixtureTransport(fixtures or ROOT / "fixtures", scenario=scenario)
     sleeps: list[float] = []
 
     async def fake_sleep(s: float) -> None:
@@ -90,6 +92,7 @@ def start(tmp: Path, *, budgets: Budgets | None = None, scenario: str = "default
         itglue_region="us", itglue_api_key="ITG.synthetic-demo-key",
         connectwise_base_url="https://api-na.myconnectwise.net/v4_6_release/apis/3.0",
         connectwise_client_id="00000000-demo-client-id", budgets=budgets or Budgets(),
+        itglue_site_summary_type_id=site_summary_type_id,
     )
     app = build(settings, upstream_transport=transport, jwks=idp.jwks, audit=AuditLog(tmp / "audit.jsonl"),
                 sleep=fake_sleep, clock_iso=lambda: FIXED_TIME)

@@ -33,11 +33,16 @@ class CursorCodec:
         try:
             b64, sig = cursor.split(".", 1)
             body = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
-        except ValueError as exc:
-            raise PolicyError("invalid_cursor", "This cursor is malformed.") from exc
-        if not hmac.compare_digest(sig, self._sig(body)):
+            valid = hmac.compare_digest(sig.encode("ascii"), self._sig(body).encode("ascii"))
+        except (ValueError, TypeError, UnicodeError):
+            raise PolicyError("invalid_cursor", "This cursor is malformed.") from None
+        if not valid:
             raise PolicyError("invalid_cursor", "This cursor was not issued by this server.")
-        payload = json.loads(body)
+        try:
+            payload = json.loads(body)
+            payload["x"], payload["p"], payload["c"], payload["t"], payload["q"], payload["s"]
+        except (ValueError, TypeError, KeyError):
+            raise PolicyError("invalid_cursor", "This cursor is malformed.") from None
         if payload["x"] < time.time():
             raise PolicyError("invalid_cursor", "This cursor has expired; start the listing again.")
         if (payload["p"], payload["c"], payload["t"], payload["q"]) != (principal, client_ref, tool, query):

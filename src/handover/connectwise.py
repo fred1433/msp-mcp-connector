@@ -16,13 +16,17 @@ from typing import Any
 import httpx
 
 from .config import Budgets
-from .content import clean_free_text
+from .content import cap, clean
 from .credentials import PsaCredential
 from .upstream import Deadline, SharedBudget, SourceUnavailable, send
 
 
+MAX_TEXT = 300
+
+
 def _name(obj: Any, key: str = "name") -> str | None:
-    return obj.get(key) if isinstance(obj, dict) else None
+    value = obj.get(key) if isinstance(obj, dict) else None
+    return None if value is None else str(value)
 
 
 class ConnectWise:
@@ -60,21 +64,31 @@ class ConnectWise:
 
     @staticmethod
     def _ticket(row: dict) -> dict:
-        info = row.get("_info") or {}
-        company = row.get("company") or {}
-        return {
-            "id": int(row["id"]),
-            "summary": row.get("summary"),
-            "board": _name(row.get("board")),
-            "status": _name(row.get("status")),
-            "priority": _name(row.get("priority")),
-            "company_id": int(company.get("id", -1)),
-            "company_identifier": company.get("identifier"),
-            "contact": _name(row.get("contact")),
-            "owner": _name(row.get("owner"), "identifier"),
-            "entered_at": info.get("dateEntered"),
-            "last_updated": info.get("lastUpdated"),
+        info = row.get("_info") if isinstance(row.get("_info"), dict) else {}
+        company = row.get("company") if isinstance(row.get("company"), dict) else {}
+        try:
+            ticket_id, company_id = int(row["id"]), int(company.get("id", -1))
+        except (TypeError, ValueError, KeyError):
+            raise SourceUnavailable("connectwise", "bad_response", "The source returned a ticket with a malformed id.") from None
+        summary = clean(str(row.get("summary") or ""), MAX_TEXT)
+        out = {
+            "id": ticket_id,
+            "summary": summary.text,
+            "board": cap(_name(row.get("board")), MAX_TEXT),
+            "status": cap(_name(row.get("status")), MAX_TEXT),
+            "priority": cap(_name(row.get("priority")), MAX_TEXT),
+            "company_id": company_id,
+            "company_identifier": cap(company.get("identifier"), MAX_TEXT),
+            "contact": cap(_name(row.get("contact")), MAX_TEXT),
+            "owner": cap(_name(row.get("owner"), "identifier"), MAX_TEXT),
+            "entered_at": cap(info.get("dateEntered"), 40),
+            "last_updated": cap(info.get("lastUpdated"), 40),
         }
+        if summary.redacted:
+            out["content_policy_applied"] = True
+        if summary.truncated:
+            out["truncated"] = True
+        return out
 
     async def open_tickets(self, cred: PsaCredential, company_id: int, page: int, deadline: Deadline) -> tuple[list[dict], bool]:
         params = {
@@ -101,19 +115,31 @@ class ConnectWise:
         for row in self._json(resp, list):
             if not isinstance(row, dict) or "id" not in row:
                 continue
-            text, withheld = clean_free_text(str(row.get("text") or ""), budgets.max_note_chars)
+            c = clean(str(row.get("text") or ""), budgets.max_note_chars)
             kind = ("resolution" if row.get("resolutionFlag") else
                     "internal" if row.get("internalAnalysisFlag") else
                     "discussion" if row.get("detailDescriptionFlag") else "note")
-            note = {"id": int(row["id"]), "kind": kind, "created_at": row.get("dateCreated"),
-                    "created_by": row.get("createdBy"), "text": text}
-            if withheld:
+            try:
+                note_id = int(row["id"])
+            except (TypeError, ValueError):
+                raise SourceUnavailable("connectwise", "bad_response", "The source returned a note with a malformed id.") from None
+            note = {"id": note_id, "kind": kind, "created_at": cap(row.get("dateCreated"), 40),
+                    "created_by": cap(row.get("createdBy"), MAX_TEXT), "text": c.text}
+            if c.redacted:
                 note["content_policy_applied"] = True
+            if c.truncated:
+                note["truncated"] = True
             out.append(note)
         out.sort(key=lambda n: n["id"])  # oldest first, so a reader follows the story
         return out
 
     async def ticket_configurations(self, cred: PsaCredential, ticket_id: int, deadline: Deadline) -> list[dict]:
         resp = await self._get(cred, f"/service/tickets/{int(ticket_id)}/configurations", {}, deadline)
-        return [{"id": int(r["id"]), "name": r.get("deviceIdentifier") or r.get("name")}
-                for r in self._json(resp, list) if isinstance(r, dict) and "id" in r]
+        out = []
+        for r in self._json(resp, list):
+            if isinstance(r, dict) and "id" in r:
+                try:
+                    out.append({"id": int(r["id"]), "name": cap(r.get("deviceIdentifier") or r.get("name"), MAX_TEXT)})
+                except (TypeError, ValueError):
+                    raise SourceUnavailable("connectwise", "bad_response", "The source returned a configuration with a malformed id.") from None
+        return out

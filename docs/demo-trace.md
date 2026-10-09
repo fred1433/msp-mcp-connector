@@ -291,6 +291,9 @@ Result:
       "password_fields": 2,
       "other_fields": 1
     },
+    "content_policy_applied": [
+      "Site notes"
+    ],
     "source": {
       "system": "itglue",
       "record": "flexible_assets/640118",
